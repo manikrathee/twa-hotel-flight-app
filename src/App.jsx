@@ -33,13 +33,24 @@ export default function App() {
         <HUDBar flights={[]} weather={weather} />
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 16,
-          fontFamily: 'var(--font-mono)',
+          alignItems: 'center', justifyContent: 'center', gap: 10,
         }}>
-          <div style={{ fontSize: 32, color: 'var(--red)' }}>⚠</div>
-          <div style={{ fontSize: 14, color: 'var(--text)' }}>Unable to reach OpenSky Network</div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{error}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', opacity: 0.6 }}>Retrying automatically every 15 seconds</div>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%',
+            border: '1px solid rgba(227,30,38,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 24px rgba(227,30,38,0.12)',
+            marginBottom: 8,
+          }}>
+            <span style={{ fontSize: 20, color: 'var(--red)' }}>⚠</span>
+          </div>
+          <div style={{ fontSize: 15, fontFamily: 'var(--font-display)', color: 'var(--text)', letterSpacing: 3 }}>
+            NO ADS-B FEED
+          </div>
+          <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--red-dim)', letterSpacing: 1 }}>{error}</div>
+          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', opacity: 0.6, marginTop: 4 }}>
+            Retrying automatically every 15 seconds
+          </div>
         </div>
       </div>
     )
@@ -82,17 +93,17 @@ export default function App() {
 
       {loading && flights.length === 0 && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(4,4,13,0.9)',
+          position: 'fixed', inset: 0, background: 'rgba(3,3,12,0.92)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', gap: 20, zIndex: 9000,
-          backdropFilter: 'blur(4px)',
+          justifyContent: 'center', gap: 16, zIndex: 9000,
+          backdropFilter: 'blur(6px)',
         }}>
           <RadarLoader />
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--cyan)', letterSpacing: 3 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--cyan)', letterSpacing: 5, marginTop: 4 }}>
             ACQUIRING TRAFFIC
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1 }}>
-            Connecting to OpenSky Network · KJFK area
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', letterSpacing: 1.5 }}>
+            Connecting to OpenSky Network · KJFK
           </div>
         </div>
       )}

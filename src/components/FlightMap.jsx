@@ -381,29 +381,30 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     <div style={{ flex: 1, width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       <style>{`
         .maplibregl-ctrl-group {
-          background: rgba(7,7,28,0.92) !important;
-          border: 1px solid rgba(0,195,255,0.35) !important;
-          border-radius: 6px !important;
-          box-shadow: none !important;
+          background: rgba(4,4,16,0.94) !important;
+          border: 1px solid rgba(0,212,200,0.2) !important;
+          border-radius: 5px !important;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.5) !important;
         }
         .maplibregl-ctrl-group button {
           background: transparent !important;
-          color: rgba(0,195,255,0.8) !important;
-          border-bottom-color: rgba(0,195,255,0.15) !important;
+          color: rgba(0,212,200,0.7) !important;
+          border-bottom-color: rgba(0,212,200,0.1) !important;
         }
-        .maplibregl-ctrl-group button:hover { background: rgba(0,195,255,0.1) !important; }
-        .maplibregl-ctrl-compass .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg) brightness(0.8); }
+        .maplibregl-ctrl-group button:hover { background: rgba(0,212,200,0.08) !important; color: rgba(0,212,200,1) !important; }
+        .maplibregl-ctrl-compass .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(160deg) brightness(0.75); }
         .maplibregl-ctrl-attrib {
-          background: rgba(4,4,20,0.88) !important;
-          color: rgba(106,128,160,0.8) !important;
-          font-size: 10px !important;
+          background: rgba(3,3,12,0.9) !important;
+          color: rgba(84,96,112,0.8) !important;
+          font-size: 9px !important;
+          font-family: 'DM Mono', monospace !important;
         }
-        .maplibregl-ctrl-attrib a { color: rgba(0,195,255,0.55) !important; }
+        .maplibregl-ctrl-attrib a { color: rgba(0,212,200,0.45) !important; }
         .twa-popup .maplibregl-popup-content {
-          background: rgba(7,7,28,0.92) !important;
-          border: 1px solid rgba(0,195,255,0.3) !important;
-          color: rgba(0,195,255,0.9) !important;
-          font-family: 'JetBrains Mono', monospace !important;
+          background: rgba(4,4,16,0.94) !important;
+          border: 1px solid rgba(0,212,200,0.25) !important;
+          color: rgba(0,212,200,0.9) !important;
+          font-family: 'DM Mono', monospace !important;
           font-size: 11px !important;
           padding: 5px 10px !important;
           border-radius: 4px !important;
@@ -419,17 +420,21 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         style={{
           position: 'absolute', bottom: 44, right: 12,
           zIndex: 10,
-          background: 'rgba(7,7,28,0.92)',
-          border: '1px solid rgba(0,195,255,0.35)',
-          borderRadius: 6,
-          color: 'rgba(0,195,255,0.8)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: 1,
-          padding: '6px 10px',
+          background: 'rgba(4,4,16,0.94)',
+          border: '1px solid rgba(0,212,200,0.2)',
+          borderRadius: 5,
+          color: 'rgba(0,212,200,0.7)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 11,
+          letterSpacing: 2,
+          padding: '5px 11px',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+          transition: 'color 0.15s, border-color 0.15s',
         }}
+        onMouseEnter={e => { e.currentTarget.style.color = 'rgba(0,212,200,1)'; e.currentTarget.style.borderColor = 'rgba(0,212,200,0.4)' }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(0,212,200,0.7)'; e.currentTarget.style.borderColor = 'rgba(0,212,200,0.2)' }}
       >
         ⊕ JFK VIEW
       </button>
@@ -437,19 +442,17 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       {/* Legend */}
       <div style={{
         position: 'absolute', bottom: 44, left: 12, zIndex: 10,
-        background: 'rgba(4,4,20,0.88)',
-        border: '1px solid rgba(0,195,255,0.12)',
-        borderRadius: 6,
-        padding: '7px 11px',
-        fontSize: 10,
-        fontFamily: 'var(--font-mono)',
-        color: 'rgba(106,128,160,0.8)',
-        backdropFilter: 'blur(8px)',
+        background: 'rgba(3,3,12,0.92)',
+        border: '1px solid rgba(0,212,200,0.1)',
+        borderRadius: 5,
+        padding: '6px 10px',
+        backdropFilter: 'blur(10px)',
         display: 'flex', flexDirection: 'column', gap: 5,
+        boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       }}>
         <Row color="var(--cyan)" label="FLIGHT PATH" line />
         <Row color="#e31e26" label="TWA HOTEL" dot />
-        <Row color="rgba(160,175,200,0.45)" label="JFK RUNWAYS" line />
+        <Row color="rgba(160,175,200,0.4)" label="JFK RUNWAYS" line />
       </div>
     </div>
   )
@@ -458,9 +461,9 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
 function Row({ color, label, line, dot }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-      {line && <div style={{ width: 18, height: 2, background: color, borderRadius: 1 }} />}
-      {dot && <div style={{ width: 10, height: 10, borderRadius: '50%', border: `1.5px solid ${color}`, background: `${color}22` }} />}
-      <span>{label}</span>
+      {line && <div style={{ width: 16, height: 1.5, background: color, borderRadius: 1, opacity: 0.9 }} />}
+      {dot && <div style={{ width: 8, height: 8, borderRadius: '50%', border: `1.5px solid ${color}`, background: `${color}22` }} />}
+      <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', letterSpacing: 2, color: 'rgba(84,96,112,0.9)' }}>{label}</span>
     </div>
   )
 }

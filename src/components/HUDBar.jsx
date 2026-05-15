@@ -35,14 +35,15 @@ export default function HUDBar({ flights, weather }) {
   return (
     <div style={{
       height: 52,
-      background: 'rgba(4,4,20,0.96)',
-      borderBottom: '1px solid var(--border-bright)',
+      background: 'rgba(3,3,14,0.97)',
+      borderBottom: '1px solid rgba(0,212,200,0.2)',
+      boxShadow: '0 1px 0 rgba(0,212,200,0.06), 0 4px 24px rgba(0,0,0,0.6)',
       display: 'flex',
       alignItems: 'center',
       padding: '0 20px',
       gap: 0,
       flexShrink: 0,
-      backdropFilter: 'blur(12px)',
+      backdropFilter: 'blur(16px)',
       position: 'relative',
       zIndex: 100,
     }}>
@@ -58,7 +59,7 @@ export default function HUDBar({ flights, weather }) {
         }}>
           <img src="/twa-logo.png" alt="TWA Hotel" height={30} style={{ display: 'block' }} />
         </div>
-        <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: 2, fontFamily: 'var(--font-mono)' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 3, fontFamily: 'var(--font-display)' }}>
           FLIGHT DECK
         </div>
       </div>
@@ -105,11 +106,11 @@ export default function HUDBar({ flights, weather }) {
 function HUDStat({ label, value, unit, color = 'var(--text)' }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginRight: 20 }}>
-      <span style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: 1.5, fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
+      <span style={{ fontSize: 8, color: 'var(--text-dim)', letterSpacing: 2, fontFamily: 'var(--font-display)', textTransform: 'uppercase', lineHeight: 1.2 }}>
         {label}
       </span>
-      <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color, fontWeight: 500, letterSpacing: 0.5 }}>
-        {value}{unit ? <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 2 }}>{unit}</span> : null}
+      <span style={{ fontSize: 15, fontFamily: 'var(--font-mono)', color, fontWeight: 400, letterSpacing: 0.5, lineHeight: 1.2 }}>
+        {value}{unit ? <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 3 }}>{unit}</span> : null}
       </span>
     </div>
   )

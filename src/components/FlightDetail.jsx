@@ -33,8 +33,8 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
     <div style={{
       width: 360,
       flexShrink: 0,
-      background: 'var(--panel)',
-      borderLeft: '1px solid var(--border-bright)',
+      background: 'rgba(5,5,18,0.98)',
+      borderLeft: '1px solid rgba(0,212,200,0.15)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -42,21 +42,21 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
     }}>
       {/* Header bar */}
       <div style={{
-        padding: '10px 16px',
-        borderBottom: '1px solid var(--border)',
+        padding: '10px 16px 10px',
+        borderBottom: '1px solid rgba(0,212,200,0.08)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
-        background: 'rgba(0,195,255,0.04)',
+        background: 'rgba(0,212,200,0.03)',
       }}>
         <div>
-          <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: 1.5 }}>
+          <div style={{ fontSize: 9, fontFamily: 'var(--font-display)', color: 'var(--text-dim)', letterSpacing: 3 }}>
             FLIGHT DETAIL
           </div>
           <div style={{
-            fontSize: 18, fontFamily: 'var(--font-mono)', color: 'var(--cyan)',
-            fontWeight: 600, letterSpacing: 2, marginTop: 1,
+            fontSize: 22, fontFamily: 'var(--font-display)', color: 'var(--cyan)',
+            letterSpacing: 3, marginTop: 0, lineHeight: 1.1,
           }}>
             {flightNum}
           </div>
@@ -64,10 +64,13 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         <button
           onClick={onClose}
           style={{
-            background: 'none', border: '1px solid var(--border)', borderRadius: 4,
-            color: 'var(--text-dim)', cursor: 'pointer', padding: '4px 8px',
-            fontSize: 11, fontFamily: 'var(--font-mono)',
+            background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
+            color: 'var(--text-dim)', cursor: 'pointer', padding: '4px 10px',
+            fontSize: 9, fontFamily: 'var(--font-display)', letterSpacing: 2,
+            transition: 'border-color 0.15s, color 0.15s',
           }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'; e.currentTarget.style.color = 'var(--text)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text-dim)' }}
         >
           ✕ CLOSE
         </button>
@@ -77,15 +80,15 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         {/* Aircraft silhouette section */}
         <div style={{
           padding: '16px',
-          borderBottom: '1px solid var(--border)',
+          borderBottom: '1px solid rgba(0,212,200,0.07)',
           display: 'flex',
           alignItems: 'center',
           gap: 16,
-          background: 'linear-gradient(135deg, rgba(0,195,255,0.04) 0%, transparent 60%)',
+          background: 'linear-gradient(135deg, rgba(0,212,200,0.05) 0%, transparent 55%)',
         }}>
           <AircraftSilhouette typeCode={typeCode} size={110} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 4, fontFamily: 'var(--font-mono)', letterSpacing: 1 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', marginBottom: 5, fontFamily: 'var(--font-display)', letterSpacing: 3 }}>
               AIRCRAFT
             </div>
             <div style={{ fontSize: 15, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
@@ -110,22 +113,16 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         {(origin || dest) && (
           <div style={{
             padding: '14px 16px',
-            borderBottom: '1px solid var(--border)',
+            borderBottom: '1px solid rgba(0,212,200,0.07)',
           }}>
-            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5, marginBottom: 10 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 3, marginBottom: 10 }}>
               ROUTE
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <AirportBadge airport={origin} />
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0 }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <div style={{
-                  padding: '2px 6px',
-                  fontSize: 10, color: 'var(--cyan)',
-                  fontFamily: 'var(--font-mono)',
-                  whiteSpace: 'nowrap',
-                }}>▶</div>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <div style={{ width: '100%', height: 1, background: 'repeating-linear-gradient(90deg, rgba(0,212,200,0.4) 0px, rgba(0,212,200,0.4) 4px, transparent 4px, transparent 8px)' }} />
+                <div style={{ fontSize: 9, color: 'rgba(0,212,200,0.5)', fontFamily: 'var(--font-mono)' }}>▶</div>
               </div>
               <AirportBadge airport={dest} />
             </div>
@@ -133,8 +130,8 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         )}
 
         {/* Live telemetry */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5, marginBottom: 10 }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(0,212,200,0.07)' }}>
+          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 3, marginBottom: 10 }}>
             LIVE TELEMETRY
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -179,33 +176,36 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         </div>
 
         {/* Altitude bar */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(0,212,200,0.07)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5 }}>ALTITUDE PROFILE</span>
+            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 3 }}>ALTITUDE PROFILE</span>
             <span style={{ fontSize: 11, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>{altFt.toLocaleString()} ft</span>
           </div>
           <AltitudeBar altFt={altFt} vrFpm={vrFpm} />
         </div>
 
         {/* Flight path toggle */}
-        <div style={{ padding: '14px 16px' }}>
+        <div style={{ padding: '12px 16px' }}>
           <button
             onClick={() => setShowPath(v => !v)}
             style={{
               width: '100%',
-              background: showPath ? 'rgba(0,195,255,0.12)' : 'transparent',
-              border: '1px solid var(--border-bright)',
-              borderRadius: 6,
-              color: 'var(--cyan)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              padding: '8px 14px',
+              background: 'none',
+              border: 'none',
+              borderBottom: showPath ? '1px solid rgba(0,212,200,0.35)' : '1px solid rgba(255,255,255,0.06)',
+              padding: '0 0 9px 0',
               cursor: 'pointer',
-              letterSpacing: 1.5,
-              transition: 'background 0.15s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: showPath ? 'var(--cyan)' : 'var(--text-dim)',
+              transition: 'color 0.15s, border-color 0.15s',
             }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--cyan)' }}
+            onMouseLeave={e => { if (!showPath) e.currentTarget.style.color = 'var(--text-dim)' }}
           >
-            {showPath ? '▲ HIDE FLIGHT PATH' : '▼ SHOW FLIGHT PATH'}
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', letterSpacing: 3 }}>FLIGHT PATH</span>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', transition: 'transform 0.15s', display: 'inline-block', transform: showPath ? 'rotate(180deg)' : 'none' }}>▾</span>
           </button>
 
           {showPath && track && (
@@ -230,17 +230,17 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
 }
 
 function AirportBadge({ airport }) {
-  if (!airport) return <div style={{ width: 80 }} />
+  if (!airport) return <div style={{ width: 64 }} />
   return (
-    <div style={{ textAlign: 'center', minWidth: 72 }}>
+    <div style={{ textAlign: 'center', minWidth: 60 }}>
       <div style={{
-        fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 700,
-        color: 'var(--heading)', letterSpacing: 1,
+        fontSize: 22, fontFamily: 'var(--font-display)', fontWeight: 400,
+        color: 'var(--heading)', letterSpacing: 2, lineHeight: 1,
       }}>
         {airport.iata_code || airport.icao_code || '—'}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.3 }}>
-        {airport.municipality || airport.name?.slice(0, 18)}
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 3, lineHeight: 1.3, fontFamily: 'var(--font-ui)' }}>
+        {airport.municipality || airport.name?.slice(0, 16)}
       </div>
     </div>
   )
@@ -249,25 +249,26 @@ function AirportBadge({ airport }) {
 function TelemetryCard({ label, value, unit, bar, color, noBar }) {
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.03)',
-      border: '1px solid var(--border)',
-      borderRadius: 6,
+      background: 'rgba(255,255,255,0.025)',
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 5,
       padding: '8px 10px',
     }}>
-      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5, marginBottom: 4 }}>
+      <div style={{ fontSize: 8, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 2, marginBottom: 4, lineHeight: 1 }}>
         {label}
       </div>
-      <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 500, color: color || 'var(--heading)' }}>
+      <div style={{ fontSize: 17, fontFamily: 'var(--font-mono)', fontWeight: 400, color: color || 'var(--heading)', lineHeight: 1.1 }}>
         {value}
-        {unit && <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 3 }}>{unit}</span>}
+        {unit && <span style={{ fontSize: 9, color: 'var(--text-dim)', marginLeft: 3 }}>{unit}</span>}
       </div>
       {!noBar && bar !== undefined && (
-        <div style={{ marginTop: 6, height: 2, background: 'rgba(255,255,255,0.08)', borderRadius: 1 }}>
+        <div style={{ marginTop: 6, height: 1.5, background: 'rgba(255,255,255,0.07)', borderRadius: 1 }}>
           <div style={{
             height: '100%', borderRadius: 1,
             background: color || 'var(--cyan)',
             width: `${Math.round(bar * 100)}%`,
             transition: 'width 0.4s ease',
+            boxShadow: `0 0 6px ${color || 'var(--cyan)'}`,
           }} />
         </div>
       )}
