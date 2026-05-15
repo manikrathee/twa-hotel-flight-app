@@ -48,18 +48,18 @@ export default function HUDBar({ flights, weather }) {
     }}>
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 28 }}>
-        <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
-          <path d="M2 10 L12 3 L16 6 L26 2" stroke="var(--red)" strokeWidth="2.5" strokeLinecap="round"/>
-          <path d="M2 10 L12 17 L16 14 L26 18" stroke="var(--red)" strokeWidth="2.5" strokeLinecap="round"/>
-          <circle cx="14" cy="10" r="2.5" fill="var(--cyan)"/>
-        </svg>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 3, color: 'var(--heading)', lineHeight: 1 }}>
-            TWA
-          </div>
-          <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: 2, lineHeight: 1, marginTop: 2 }}>
-            FLIGHT DECK
-          </div>
+        <div style={{
+          background: 'white',
+          borderRadius: 5,
+          padding: '3px 5px',
+          display: 'flex',
+          alignItems: 'center',
+          boxShadow: '0 0 10px rgba(227,30,38,0.25)',
+        }}>
+          <img src="/twa-logo.png" alt="TWA Hotel" height={30} style={{ display: 'block' }} />
+        </div>
+        <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: 2, fontFamily: 'var(--font-mono)' }}>
+          FLIGHT DECK
         </div>
       </div>
 
