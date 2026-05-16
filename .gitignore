@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .worktrees
+
+# Flight DB and generated cache
+data/
+public/flights-cache.json

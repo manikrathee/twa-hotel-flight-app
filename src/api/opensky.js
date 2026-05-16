@@ -11,20 +11,20 @@ const BBOX = { lamin: 40.35, lomin: -74.35, lamax: 40.95, lomax: -73.15 }
 function parseStates(states) {
   if (!Array.isArray(states)) return []
   return states.map(s => ({
-    icao24: s[0],
-    callsign: (s[1] || '').trim(),
+    icao24:         s[0],
+    callsign:      (s[1] || '').trim(),
     origin_country: s[2],
-    time_position: s[3],
-    last_contact: s[4],
-    longitude: s[5],
-    latitude: s[6],
-    baro_altitude: s[7],
-    on_ground: s[8],
-    velocity: s[9],        // m/s
-    heading: s[10],        // degrees from north
-    vertical_rate: s[11],  // m/s
-    geo_altitude: s[13],
-    squawk: s[14],
+    time_position:  s[3],
+    last_contact:   s[4],
+    longitude:      s[5],
+    latitude:       s[6],
+    baro_altitude:  s[7],
+    on_ground:      s[8],
+    velocity:       s[9],        // m/s
+    heading:        s[10],        // degrees from north
+    vertical_rate:  s[11],  // m/s
+    geo_altitude:   s[13],
+    squawk:         s[14],
   }))
 }
 
@@ -59,6 +59,23 @@ export async function fetchFlights() {
   const data = await res.json()
   recordSuccess()
   return parseStates(data.states || [])
+}
+
+// Returns { flights, cachedAt } from the static DB-backed cache file.
+// The file is written by scripts/fetch-flights.js and served by Vite as a static asset.
+export async function fetchCachedFlights() {
+  const res = await fetch('/flights-cache.json', {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(4000),
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  if (!data?.flights?.length) return null
+  return {
+    flights: data.flights,
+    cachedAt: new Date(data.fetchedAt),
+    cacheSource: data.source, // 'live' | 'mock'
+  }
 }
 
 export async function fetchTrack(icao24, signal) {

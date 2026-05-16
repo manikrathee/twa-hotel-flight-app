@@ -11,7 +11,7 @@ export default function App() {
   const [track, setTrack] = useState(null)
   const [theme, setTheme] = useState('dark')
   const toggleTheme = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), [])
-  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale } = useFlights()
+  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource } = useFlights()
   const { weather } = useWeather()
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
@@ -32,7 +32,7 @@ export default function App() {
   if (error && flights.length === 0) {
     return (
       <div className="app" data-theme={theme}>
-        <HUDBar flights={[]} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} theme={theme} onThemeToggle={toggleTheme} />
+        <HUDBar flights={[]} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} dataSource={dataSource} theme={theme} onThemeToggle={toggleTheme} />
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 10,
@@ -60,7 +60,7 @@ export default function App() {
 
   return (
     <div className="app" data-theme={theme}>
-      <HUDBar flights={flights} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} theme={theme} onThemeToggle={toggleTheme} />
+      <HUDBar flights={flights} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} dataSource={dataSource} theme={theme} onThemeToggle={toggleTheme} />
 
       {/* main-layout is position:relative so the detail overlay can be absolute */}
       <div className="main-layout">

@@ -23,7 +23,26 @@ function Clock() {
   )
 }
 
-export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil, lastUpdated, isStale, theme, onThemeToggle }) {
+function DataSourceBadge({ dataSource }) {
+  if (!dataSource || dataSource.type === 'live') return null
+  const ago = dataSource.cachedAt ? Math.round((Date.now() - dataSource.cachedAt.getTime()) / 60000) : null
+  const label = ago !== null ? `DB CACHE · ${ago < 1 ? '<1' : ago}m ago` : 'DB CACHE'
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 7,
+      background: 'rgba(255,180,0,0.08)',
+      border: '1px solid rgba(255,180,0,0.3)',
+      borderRadius: 4, padding: '3px 10px', marginRight: 20,
+    }}>
+      <span style={{ fontSize: 9, color: 'var(--amber)', opacity: 0.7 }}>⬡</span>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--amber)', letterSpacing: 2 }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
+export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil, lastUpdated, isStale, dataSource, theme, onThemeToggle }) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
   const windSpd = weather ? Math.round(weather.wind_speed_10m) : null
@@ -80,6 +99,9 @@ export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil
           LIVE
         </span>
       </div>
+
+      {/* DB cache source — only shown when not live */}
+      <DataSourceBadge dataSource={dataSource} />
 
       {/* API rate limit status — only shown when non-ok */}
       <ApiStatusIndicator
