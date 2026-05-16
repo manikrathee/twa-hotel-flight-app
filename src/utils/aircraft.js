@@ -1,3 +1,5 @@
+import { AIRCRAFT_FACTS, AIRLINE_FACTS } from '../data/aviationFacts'
+
 // ICAO airline prefix → airline name
 const AIRLINE_LOOKUP = {
   AAL: 'American Airlines', UAL: 'United Airlines', DAL: 'Delta Air Lines',
@@ -73,9 +75,19 @@ export function getAircraftCategory(typeCode) {
 }
 
 export function getAirlineName(callsign) {
-  if (!callsign) return null
-  const prefix = callsign.replace(/\d+.*$/, '').trim().toUpperCase()
+  const prefix = airlinePrefix(callsign)
   return AIRLINE_LOOKUP[prefix] || null
+}
+
+export function airlinePrefix(callsign) {
+  if (!callsign) return null
+  return callsign.replace(/\d+.*$/, '').trim().toUpperCase() || null
+}
+
+export function getAirlineFacts(callsign, airline) {
+  const prefix = airline?.icao || airlinePrefix(callsign)
+  if (!prefix) return null
+  return AIRLINE_FACTS[prefix.toUpperCase()] || null
 }
 
 export function parseFlightNumber(callsign) {
@@ -105,6 +117,11 @@ export function modelLabel(manufacturer, model, typeCode) {
     return labels[typeCode.toUpperCase()] || typeCode
   }
   return 'Unknown Aircraft'
+}
+
+export function getAircraftFacts(typeCode) {
+  if (!typeCode) return null
+  return AIRCRAFT_FACTS[typeCode.toUpperCase()] || null
 }
 
 // Engine count hint

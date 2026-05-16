@@ -143,7 +143,6 @@ const SILHOUETTES = {
 export default function AircraftSilhouette({ typeCode, size = 180, color = '#00c3ff', glowColor }) {
   const category = getAircraftCategory(typeCode)
   const shape = SILHOUETTES[category] || SILHOUETTES.unknown
-  const glow = glowColor || color
   const filterId = `glow-${(typeCode || 'default').replace(/[^a-z0-9]/gi, '')}`
 
   return (
@@ -158,7 +157,7 @@ export default function AircraftSilhouette({ typeCode, size = 180, color = '#00c
           <filter id={filterId} x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
             <feColorMatrix in="blur" type="matrix"
-              values="0 0 0 0 0   0 0.76 1 0 0   0 0 1 0 0   0 0 0 0.9 0" result="coloredBlur" />
+              values={glowMatrix(glowColor || color)} result="coloredBlur" />
             <feMerge>
               <feMergeNode in="coloredBlur" />
               <feMergeNode in="coloredBlur" />
@@ -187,4 +186,14 @@ export default function AircraftSilhouette({ typeCode, size = 180, color = '#00c
       </svg>
     </div>
   )
+}
+
+function glowMatrix(color) {
+  if (!color.startsWith('#') || color.length !== 7) {
+    return '0 0 0 0 0   0 0.76 1 0 0   0 0 1 0 0   0 0 0 0.9 0'
+  }
+  const r = parseInt(color.slice(1, 3), 16) / 255
+  const g = parseInt(color.slice(3, 5), 16) / 255
+  const b = parseInt(color.slice(5, 7), 16) / 255
+  return `0 0 0 0 ${r}   0 0 0 0 ${g}   0 0 0 0 ${b}   0 0 0 0.9 0`
 }

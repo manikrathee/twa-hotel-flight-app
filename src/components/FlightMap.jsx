@@ -105,7 +105,6 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
-  const labelMarkersRef = useRef([])
   const [mapReady, setMapReady] = useState(false)
 
   // Init map once
