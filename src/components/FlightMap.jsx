@@ -105,6 +105,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
+  const prevIcaoSetRef = useRef(null)
   const [mapReady, setMapReady] = useState(false)
 
   // Init map once
@@ -202,6 +203,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       // ── Planes source + layer ───────────────────────────────────────
       map.addSource('planes', {
         type: 'geojson',
+        promoteId: 'icao24',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
@@ -282,26 +284,45 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     }
   }, [])
 
-  // Update plane positions — single setData call, no DOM creation
+  // Update plane positions — incremental updateData() after first load
   useEffect(() => {
-    if (!mapReady || !mapRef.current) return
+    if (!mapReady || !mapRef.current) {
+      prevIcaoSetRef.current = null
+      return
+    }
     const src = mapRef.current.getSource('planes')
     if (!src) return
-    src.setData({
-      type: 'FeatureCollection',
-      features: flights
-        .filter(f => f.latitude != null && f.longitude != null)
-        .map(f => ({
-          type: 'Feature',
-          properties: {
-            icao24: f.icao24,
-            callsign: (f.callsign || f.icao24).trim(),
-            heading: f.heading || 0,
-            selected: f.icao24 === selectedFlight?.icao24,
-          },
-          geometry: { type: 'Point', coordinates: [f.longitude, f.latitude] },
-        })),
-    })
+
+    const features = flights
+      .filter(f => f.latitude != null && f.longitude != null)
+      .map(f => ({
+        type: 'Feature',
+        properties: {
+          icao24: f.icao24,
+          callsign: (f.callsign || f.icao24).trim(),
+          heading: f.heading || 0,
+          selected: f.icao24 === selectedFlight?.icao24,
+        },
+        geometry: { type: 'Point', coordinates: [f.longitude, f.latitude] },
+      }))
+
+    if (prevIcaoSetRef.current === null) {
+      src.setData({ type: 'FeatureCollection', features })
+      prevIcaoSetRef.current = new Set(features.map(f => f.properties.icao24))
+      return
+    }
+
+    const prevSet = prevIcaoSetRef.current
+    const nextMap = new Map(features.map(f => [f.properties.icao24, f]))
+    const add = features.filter(f => !prevSet.has(f.properties.icao24))
+    const update = features.filter(f => prevSet.has(f.properties.icao24))
+    const remove = [...prevSet].filter(id => !nextMap.has(id))
+
+    if (add.length || update.length || remove.length) {
+      src.updateData({ add, update, remove })
+    }
+
+    prevIcaoSetRef.current = new Set(nextMap.keys())
   }, [flights, selectedFlight?.icao24, mapReady])
 
   // Pulse ring on selected plane (single DOM marker)

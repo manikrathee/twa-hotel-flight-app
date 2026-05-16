@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { weatherCodeToCondition, estimateActiveRunways } from '../api/weather'
 import { headingToCardinal } from '../utils/geo'
+import ApiStatusIndicator from './ApiStatusIndicator'
 
 function Clock() {
   const [time, setTime] = useState(new Date())
@@ -22,7 +23,7 @@ function Clock() {
   )
 }
 
-export default function HUDBar({ flights, weather }) {
+export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil, lastUpdated, isStale }) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
   const windSpd = weather ? Math.round(weather.wind_speed_10m) : null
@@ -69,14 +70,26 @@ export default function HUDBar({ flights, weather }) {
       {/* Live indicator */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginRight: 20 }}>
         <div style={{
-          width: 7, height: 7, borderRadius: '50%', background: 'var(--green)',
+          width: 7, height: 7, borderRadius: '50%',
+          background: rateLimitStatus === 'blocked' ? 'var(--red)' : 'var(--green)',
           animation: 'pulse-dot 1.4s ease-in-out infinite',
-          boxShadow: '0 0 8px var(--green)',
+          boxShadow: rateLimitStatus === 'blocked' ? '0 0 8px var(--red)' : '0 0 8px var(--green)',
         }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 500 }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: 1.5, fontWeight: 500,
+          color: rateLimitStatus === 'blocked' ? 'var(--red)' : 'var(--green)',
+        }}>
           LIVE
         </span>
       </div>
+
+      {/* API rate limit status — only shown when non-ok */}
+      <ApiStatusIndicator
+        status={rateLimitStatus || 'ok'}
+        backoffUntil={backoffUntil}
+        lastUpdated={lastUpdated}
+        isStale={isStale}
+      />
 
       {/* Airborne count */}
       <HUDStat label="AIRCRAFT" value={airborne || '—'} unit="" color="var(--cyan)" />
