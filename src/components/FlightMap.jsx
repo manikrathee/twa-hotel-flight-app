@@ -294,7 +294,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     if (!src) return
 
     const features = flights
-      .filter(f => f.latitude != null && f.longitude != null)
+      .filter(f => f.icao24 != null && f.latitude != null && f.longitude != null)
       .map(f => ({
         type: 'Feature',
         properties: {
@@ -315,7 +315,14 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     const prevSet = prevIcaoSetRef.current
     const nextMap = new Map(features.map(f => [f.properties.icao24, f]))
     const add = features.filter(f => !prevSet.has(f.properties.icao24))
-    const update = features.filter(f => prevSet.has(f.properties.icao24))
+    // updateData requires GeoJSONFeatureDiff format: { id, newGeometry, addOrUpdateProperties }
+    const update = features
+      .filter(f => prevSet.has(f.properties.icao24))
+      .map(f => ({
+        id: f.properties.icao24,
+        newGeometry: f.geometry,
+        addOrUpdateProperties: Object.entries(f.properties).map(([key, value]) => ({ key, value })),
+      }))
     const remove = [...prevSet].filter(id => !nextMap.has(id))
 
     if (add.length || update.length || remove.length) {

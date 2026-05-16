@@ -14,7 +14,7 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
   if (status === 'ok' && !isStale) return null
 
   if (isStale && status === 'ok' && lastUpdated) {
-    const ageSec = Math.floor((Date.now() - lastUpdated.getTime()) / 1000)
+    const ageSec = Math.floor((Date.now() - Number(lastUpdated)) / 1000)
     const ageLabel = ageSec < 120 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>

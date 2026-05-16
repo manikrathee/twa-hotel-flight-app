@@ -34,7 +34,7 @@ export default function NearbyList({ flights, selectedId, onSelect }) {
           background: 'rgba(0,212,200,0.1)', padding: '1px 7px', borderRadius: 2,
           border: '1px solid rgba(0,212,200,0.2)',
         }}>
-          {flights.length}
+          {deferredFlights.length}
         </div>
       </div>
 
@@ -132,8 +132,10 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
 }, (prev, next) =>
   prev.selected === next.selected &&
   prev.flight.icao24 === next.flight.icao24 &&
+  prev.flight.callsign === next.flight.callsign &&
   prev.flight.latitude === next.flight.latitude &&
   prev.flight.longitude === next.flight.longitude &&
+  prev.flight.distKm === next.flight.distKm &&
   prev.flight.baro_altitude === next.flight.baro_altitude &&
   prev.flight.velocity === next.flight.velocity &&
   prev.flight.vertical_rate === next.flight.vertical_rate &&

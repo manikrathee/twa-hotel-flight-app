@@ -38,7 +38,7 @@ export function isBlocked() {
 
 export function backoffRemainingMs() {
   if (!isBlocked()) return 0
-  return state.backoffUntil - Date.now()
+  return Math.max(0, state.backoffUntil - Date.now())
 }
 
 export function getState() {

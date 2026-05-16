@@ -71,6 +71,7 @@ class FlightCache {
       const ttl = key.startsWith('track:') ? TTL_TRACK_MS : TTL_AIRCRAFT_MS
       if (now - entry.ts > ttl) this._mem.delete(key)
     }
+    this._persistToSession()
   }
 }
 
