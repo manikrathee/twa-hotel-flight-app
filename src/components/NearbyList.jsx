@@ -2,9 +2,46 @@ import { memo, useDeferredValue } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
+// Distance thresholds in km (roughly 10mi and 30mi)
+const KM_APPROACH = 16
+const KM_TERMINAL = 48
+const MAX_ENROUTE = 10
+
+function ZoneHeader({ label, count, color, sublabel }) {
+  return (
+    <div style={{
+      padding: '7px 23px 5px 23px',
+      display: 'flex', alignItems: 'center', gap: 10,
+      borderBottom: '1px solid rgba(255,255,255,0.04)',
+      borderTop: '1px solid rgba(255,255,255,0.04)',
+      background: 'rgba(0,0,0,0.15)',
+      flexShrink: 0,
+    }}>
+      <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <span style={{ fontSize: 11, fontFamily: 'var(--font-display)', color, letterSpacing: 2.5, fontWeight: 600 }}>
+        {label}
+      </span>
+      {sublabel && (
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: 1, marginLeft: 2 }}>
+          {sublabel}
+        </span>
+      )}
+      <div style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color, opacity: 0.7 }}>
+        {count}
+      </div>
+    </div>
+  )
+}
+
 export default function NearbyList({ flights, selectedId, onSelect, theme }) {
   const deferredFlights = useDeferredValue(flights)
-  const visible = deferredFlights.slice(0, 60)
+
+  const approach = deferredFlights.filter(f => f.distKm < KM_APPROACH)
+  const terminal = deferredFlights.filter(f => f.distKm >= KM_APPROACH && f.distKm < KM_TERMINAL)
+  const enrouteAll = deferredFlights.filter(f => f.distKm >= KM_TERMINAL)
+  const enroute = enrouteAll.slice(0, MAX_ENROUTE)
+
+  const totalShown = approach.length + terminal.length + enroute.length
 
   return (
     <div style={{
@@ -53,21 +90,45 @@ export default function NearbyList({ flights, selectedId, onSelect, theme }) {
         ))}
       </div>
 
-      {/* Flight list */}
+      {/* Flight list — grouped by proximity zone */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {visible.length === 0 && (
+        {totalShown === 0 && (
           <div style={{ padding: 33, color: 'var(--text-dim)', fontSize: 20, textAlign: 'center' }}>
             Loading traffic...
           </div>
         )}
-        {visible.map(f => (
-          <FlightRow
-            key={f.icao24}
-            flight={f}
-            selected={f.icao24 === selectedId}
-            onSelect={onSelect}
-          />
-        ))}
+
+        {approach.length > 0 && (
+          <>
+            <ZoneHeader label="APPROACH" count={approach.length} color="var(--amber)" sublabel="< 10mi" />
+            {approach.map(f => (
+              <FlightRow key={f.icao24} flight={f} selected={f.icao24 === selectedId} onSelect={onSelect} />
+            ))}
+          </>
+        )}
+
+        {terminal.length > 0 && (
+          <>
+            <ZoneHeader label="TERMINAL AREA" count={terminal.length} color="var(--cyan)" sublabel="10 – 30mi" />
+            {terminal.map(f => (
+              <FlightRow key={f.icao24} flight={f} selected={f.icao24 === selectedId} onSelect={onSelect} />
+            ))}
+          </>
+        )}
+
+        {enroute.length > 0 && (
+          <>
+            <ZoneHeader
+              label="ENROUTE"
+              count={enrouteAll.length > MAX_ENROUTE ? `${MAX_ENROUTE}/${enrouteAll.length}` : enroute.length}
+              color="rgba(255,255,255,0.28)"
+              sublabel="> 30mi"
+            />
+            {enroute.map(f => (
+              <FlightRow key={f.icao24} flight={f} selected={f.icao24 === selectedId} onSelect={onSelect} />
+            ))}
+          </>
+        )}
       </div>
     </div>
   )

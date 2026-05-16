@@ -100,7 +100,7 @@ function createPlaneImageData() {
   return ctx.getImageData(0, 0, S, S)
 }
 
-export default function FlightMap({ flights, selectedFlight, onSelect, track }) {
+export default function FlightMap({ flights, selectedFlight, onSelect, track, theme }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
@@ -351,10 +351,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       .addTo(mapRef.current)
 
     // Fly to selected if no track (track-fit handles the other case)
+    // Maintain at least zoom 8, but don't force closer than current view
     if (!track) {
+      const currentZoom = mapRef.current.getZoom()
       mapRef.current.flyTo({
         center: [selectedFlight.longitude, selectedFlight.latitude],
-        zoom: Math.max(mapRef.current.getZoom(), 12),
+        zoom: Math.max(currentZoom, 8),
         pitch: 52,
         bearing: 312,
         duration: 900,
@@ -380,7 +382,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       return
     }
 
-    const coords = track.path
+    // Trim to last 90 minutes so a cross-country flight doesn't zoom out to the whole US
+    const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 60
+    const recentPath = track.path.filter(p => p[0] >= cutoffSec)
+    const pathToUse = recentPath.length >= 2 ? recentPath : track.path
+
+    const coords = pathToUse
       .filter(p => p[1] != null && p[2] != null)
       .map(p => [p[2], p[1]])  // [lng, lat]
 
@@ -396,7 +403,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       new maplibregl.LngLatBounds(coords[0], coords[0])
     )
     mapRef.current.fitBounds(bounds, {
-      padding: 80, maxZoom: 9, pitch: 30, bearing: 0, duration: 1200,
+      padding: 80, maxZoom: 10, minZoom: 7, pitch: 30, bearing: 0, duration: 1200,
     })
   }, [track, mapReady])
 
@@ -439,6 +446,35 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       `}</style>
 
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* Track mode banner */}
+      {track?.path?.length > 0 && selectedFlight && (
+        <div style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 10,
+          background: 'rgba(0,195,255,0.1)',
+          border: '1px solid rgba(0,195,255,0.35)',
+          borderRadius: 5,
+          padding: '5px 16px',
+          backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', gap: 10,
+          boxShadow: '0 2px 16px rgba(0,195,255,0.12)',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: 'var(--cyan)',
+            boxShadow: '0 0 6px var(--cyan)',
+            animation: 'pulse-dot 1.4s ease-in-out infinite',
+          }} />
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--cyan)', letterSpacing: 2.5 }}>
+            VIEWING FLIGHT PATH
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(0,195,255,0.55)', letterSpacing: 1 }}>
+            {(selectedFlight.callsign || selectedFlight.icao24).trim()} · LAST 90 MIN
+          </span>
+        </div>
+      )}
 
       {/* Reset view button */}
       <button
