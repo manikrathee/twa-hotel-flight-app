@@ -2,36 +2,37 @@ import { memo, useDeferredValue } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
-export default function NearbyList({ flights, selectedId, onSelect }) {
+export default function NearbyList({ flights, selectedId, onSelect, theme }) {
   const deferredFlights = useDeferredValue(flights)
   const visible = deferredFlights.slice(0, 60)
 
   return (
     <div style={{
-      width: 268,
+      width: 442,
       flexShrink: 0,
-      background: 'rgba(5,5,18,0.98)',
-      borderRight: '1px solid rgba(0,212,200,0.08)',
+      background: 'var(--panel)',
+      backdropFilter: 'blur(20px)',
+      borderRight: '1px solid var(--border)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{
-        padding: '11px 14px 10px',
-        borderBottom: '1px solid rgba(0,212,200,0.08)',
+        padding: '18px 23px 17px',
+        borderBottom: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
         background: 'rgba(0,0,0,0.2)',
       }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-display)', color: 'var(--text-dim)', letterSpacing: 3 }}>
+        <div style={{ fontSize: 17, fontFamily: 'var(--font-display)', color: 'var(--text-dim)', letterSpacing: 3 }}>
           NEARBY TRAFFIC
         </div>
         <div style={{
-          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--cyan)',
-          background: 'rgba(0,212,200,0.1)', padding: '1px 7px', borderRadius: 2,
+          fontSize: 18, fontFamily: 'var(--font-mono)', color: 'var(--cyan)',
+          background: 'rgba(0,212,200,0.1)', padding: '2px 12px', borderRadius: 3,
           border: '1px solid rgba(0,212,200,0.2)',
         }}>
           {deferredFlights.length}
@@ -41,21 +42,21 @@ export default function NearbyList({ flights, selectedId, onSelect }) {
       {/* Column headers */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 48px 52px',
+        gridTemplateColumns: '1fr 79px 86px',
         gap: 0,
-        padding: '5px 14px 5px 18px',
+        padding: '8px 23px 8px 30px',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         flexShrink: 0,
       }}>
         {['CALLSIGN', 'ALT', 'SPD'].map(h => (
-          <span key={h} style={{ fontSize: 8, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 2 }}>{h}</span>
+          <span key={h} style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 2 }}>{h}</span>
         ))}
       </div>
 
       {/* Flight list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {visible.length === 0 && (
-          <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 12, textAlign: 'center' }}>
+          <div style={{ padding: 33, color: 'var(--text-dim)', fontSize: 20, textAlign: 'center' }}>
             Loading traffic...
           </div>
         )}
@@ -81,7 +82,6 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   const vrIndicator = vr > 1 ? '↑' : vr < -1 ? '↓' : '—'
   const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? '#e05a3a' : 'var(--text-dim)'
   const distMi = Math.round(flight.distKm * 0.621)
-  // Distance-based accent: close = amber, mid = teal, far = dim
   const accentColor = distMi <= 5 ? 'var(--amber)' : distMi <= 20 ? 'var(--cyan)' : 'rgba(255,255,255,0.1)'
 
   return (
@@ -91,12 +91,12 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
         width: '100%',
         background: selected ? 'rgba(0,212,200,0.07)' : 'transparent',
         border: 'none',
-        borderLeft: `2px solid ${selected ? 'var(--cyan)' : accentColor}`,
+        borderLeft: `3px solid ${selected ? 'var(--cyan)' : accentColor}`,
         borderBottom: '1px solid rgba(255,255,255,0.03)',
-        padding: '7px 12px 7px 12px',
+        padding: '12px 20px 12px 20px',
         cursor: 'pointer',
         display: 'grid',
-        gridTemplateColumns: '1fr 48px 52px',
+        gridTemplateColumns: '1fr 79px 86px',
         gap: 0,
         alignItems: 'center',
         textAlign: 'left',
@@ -107,25 +107,25 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
     >
       <div>
         <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: 11,
+          fontFamily: 'var(--font-mono)', fontSize: 18,
           color: selected ? 'var(--cyan)' : 'var(--heading)',
           letterSpacing: 0.8,
         }}>
           {fn}
         </div>
-        <div style={{ fontSize: 9.5, color: 'var(--text-dim)', marginTop: 1, fontFamily: 'var(--font-ui)' }}>
+        <div style={{ fontSize: 16, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-ui)' }}>
           {airline ? airline.replace(' Airlines', '').replace(' Airways', '') : flight.origin_country}
-          <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 4px' }}>·</span>
+          <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 7px' }}>·</span>
           <span style={{ color: distMi <= 5 ? 'var(--amber)' : 'var(--text-dim)' }}>{distMi}mi</span>
         </div>
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text)' }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text)' }}>
         <span>{alt}</span>
-        <span style={{ fontSize: 8, color: 'var(--text-dim)', marginLeft: 1 }}>FL</span>
+        <span style={{ fontSize: 13, color: 'var(--text-dim)', marginLeft: 2 }}>FL</span>
       </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18 }}>
         <span style={{ color: vrColor }}>{vrIndicator}</span>
-        <span style={{ color: 'var(--text)', marginLeft: 2 }}>{spd}</span>
+        <span style={{ color: 'var(--text)', marginLeft: 3 }}>{spd}</span>
       </div>
     </button>
   )
