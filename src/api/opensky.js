@@ -1,3 +1,5 @@
+import { record429, recordSuccess } from './rateLimitManager'
+
 const BASE = '/api/opensky'
 
 export const JFK = { lat: 40.6413, lon: -73.7781 }
@@ -31,25 +33,42 @@ export async function fetchFlights() {
     `${BASE}/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`,
     { signal: AbortSignal.timeout(12000) }
   )
-  if (!res.ok) throw new Error(`OpenSky ${res.status}`)
+  if (!res.ok) {
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('X-Rate-Limit-Retry-After-Seconds') || '0', 10) || null
+      record429(retryAfter)
+    }
+    throw new Error(`OpenSky ${res.status}`)
+  }
   const data = await res.json()
+  recordSuccess()
   return parseStates(data.states || [])
 }
 
-export async function fetchTrack(icao24) {
+export async function fetchTrack(icao24, signal) {
   const res = await fetch(
     `${BASE}/tracks/all?icao24=${icao24.toLowerCase()}&time=0`,
-    { signal: AbortSignal.timeout(10000) }
+    { signal: signal ?? AbortSignal.timeout(10000) }
   )
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('X-Rate-Limit-Retry-After-Seconds') || '0', 10) || null
+    record429(retryAfter)
+    return null
+  }
   if (!res.ok) return null
   return res.json()
 }
 
-export async function fetchAircraftMeta(icao24) {
+export async function fetchAircraftMeta(icao24, signal) {
   const res = await fetch(
     `${BASE}/metadata/aircraft/icao/${icao24.toLowerCase()}`,
-    { signal: AbortSignal.timeout(8000) }
+    { signal: signal ?? AbortSignal.timeout(8000) }
   )
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('X-Rate-Limit-Retry-After-Seconds') || '0', 10) || null
+    record429(retryAfter)
+    return null
+  }
   if (!res.ok) return null
   return res.json()
 }

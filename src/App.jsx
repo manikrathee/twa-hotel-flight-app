@@ -9,7 +9,7 @@ import useWeather from './hooks/useWeather'
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [track, setTrack] = useState(null)
-  const { flights, loading, error } = useFlights()
+  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale } = useFlights()
   const { weather } = useWeather()
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
@@ -30,7 +30,7 @@ export default function App() {
   if (error && flights.length === 0) {
     return (
       <div className="app">
-        <HUDBar flights={[]} weather={weather} />
+        <HUDBar flights={[]} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} />
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 10,
@@ -58,7 +58,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <HUDBar flights={flights} weather={weather} />
+      <HUDBar flights={flights} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} />
 
       {/* main-layout is position:relative so the detail overlay can be absolute */}
       <div className="main-layout">

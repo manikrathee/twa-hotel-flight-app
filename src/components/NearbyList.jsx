@@ -1,8 +1,10 @@
+import { memo, useDeferredValue } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
 export default function NearbyList({ flights, selectedId, onSelect }) {
-  const visible = flights.slice(0, 60)
+  const deferredFlights = useDeferredValue(flights)
+  const visible = deferredFlights.slice(0, 60)
 
   return (
     <div style={{
@@ -32,7 +34,7 @@ export default function NearbyList({ flights, selectedId, onSelect }) {
           background: 'rgba(0,212,200,0.1)', padding: '1px 7px', borderRadius: 2,
           border: '1px solid rgba(0,212,200,0.2)',
         }}>
-          {flights.length}
+          {deferredFlights.length}
         </div>
       </div>
 
@@ -70,7 +72,7 @@ export default function NearbyList({ flights, selectedId, onSelect }) {
   )
 }
 
-function FlightRow({ flight, selected, onSelect }) {
+const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   const airline = getAirlineName(flight.callsign)
   const fn = parseFlightNumber(flight.callsign) || flight.icao24
   const alt = flight.baro_altitude ? `${Math.round(metersToFeet(flight.baro_altitude) / 100)}` : '—'
@@ -127,4 +129,15 @@ function FlightRow({ flight, selected, onSelect }) {
       </div>
     </button>
   )
-}
+}, (prev, next) =>
+  prev.selected === next.selected &&
+  prev.flight.icao24 === next.flight.icao24 &&
+  prev.flight.callsign === next.flight.callsign &&
+  prev.flight.latitude === next.flight.latitude &&
+  prev.flight.longitude === next.flight.longitude &&
+  prev.flight.distKm === next.flight.distKm &&
+  prev.flight.baro_altitude === next.flight.baro_altitude &&
+  prev.flight.velocity === next.flight.velocity &&
+  prev.flight.vertical_rate === next.flight.vertical_rate &&
+  prev.onSelect === next.onSelect
+)
