@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { fetchFlights, JFK } from '../api/opensky'
 import { distanceKm } from '../utils/geo'
 
@@ -11,7 +11,7 @@ export default function useFlights() {
   const [lastUpdated, setLastUpdated] = useState(null)
   const timerRef = useRef(null)
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const raw = await fetchFlights()
       const airborne = raw
@@ -29,13 +29,16 @@ export default function useFlights() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    load()
+    const firstLoad = setTimeout(load, 0)
     timerRef.current = setInterval(load, POLL_MS)
-    return () => clearInterval(timerRef.current)
-  }, [])
+    return () => {
+      clearTimeout(firstLoad)
+      clearInterval(timerRef.current)
+    }
+  }, [load])
 
   return { flights, loading, error, lastUpdated }
 }

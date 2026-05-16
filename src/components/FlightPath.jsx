@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
-import { metersToFeet, msToKnots } from '../utils/geo'
+import { metersToFeet } from '../utils/geo'
 
-export default function FlightPath({ track, currentAlt }) {
+export default function FlightPath({ track }) {
   const [hoverIdx, setHoverIdx] = useState(null)
 
   const points = useMemo(() => {

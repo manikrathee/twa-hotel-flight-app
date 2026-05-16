@@ -2,23 +2,27 @@ import { useState, useEffect } from 'react'
 import useFlightDetail from '../hooks/useFlightDetail'
 import AircraftSilhouette from './AircraftSilhouette'
 import FlightPath from './FlightPath'
-import { getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
-import { metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
+import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
+import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
 
 export default function FlightDetail({ flight, onClose, onTrackLoad }) {
   const { track, route, aircraftInfo, loading } = useFlightDetail(flight)
   const [showPath, setShowPath] = useState(false)
 
   // Notify parent when track loads (for map path rendering)
-  useEffect(() => { onTrackLoad?.(track) }, [track])
+  useEffect(() => { onTrackLoad?.(track) }, [onTrackLoad, track])
 
   const callsign = flight.callsign || flight.icao24
   const flightNum = parseFlightNumber(callsign)
   const airline = getAirlineName(callsign) || route?.airline?.name || flight.origin_country
 
   const typeCode = aircraftInfo?.type || aircraftInfo?.icao_type
+  const aircraftFacts = getAircraftFacts(typeCode)
+  const airlineFacts = getAirlineFacts(callsign, route?.airline)
   const model = modelLabel(aircraftInfo?.manufacturer, aircraftInfo?.model, typeCode)
   const registration = aircraftInfo?.registration
+  const photo = aircraftInfo?.url_photo_thumbnail || aircraftInfo?.url_photo
+  const owner = aircraftInfo?.registered_owner
 
   const altFt = metersToFeet(flight.baro_altitude)
   const spdKt = msToKnots(flight.velocity)
@@ -28,6 +32,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
 
   const origin = route?.origin
   const dest = route?.destination
+  const routeMiles = routeDistanceMiles(origin, dest)
 
   return (
     <div style={{
@@ -83,7 +88,22 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           gap: 16,
           background: 'linear-gradient(135deg, rgba(0,195,255,0.04) 0%, transparent 60%)',
         }}>
-          <AircraftSilhouette typeCode={typeCode} size={110} />
+          {photo ? (
+            <img
+              src={photo}
+              alt=""
+              style={{
+                width: 110,
+                height: 132,
+                objectFit: 'cover',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.04)',
+              }}
+            />
+          ) : (
+            <AircraftSilhouette typeCode={typeCode} size={110} />
+          )}
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 4, fontFamily: 'var(--font-mono)', letterSpacing: 1 }}>
               AIRCRAFT
@@ -99,6 +119,11 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
               {airline}
             </div>
+            {owner && owner !== airline && (
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4, lineHeight: 1.3 }}>
+                Operated by {owner}
+              </div>
+            )}
             <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 4, letterSpacing: 0.5 }}>
               ICAO: {flight.icao24?.toUpperCase()}
               {flight.squawk && <span> · SQWK: {flight.squawk}</span>}
@@ -129,7 +154,42 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
               </div>
               <AirportBadge airport={dest} />
             </div>
+            {routeMiles && (
+              <div style={{
+                marginTop: 10,
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+              }}>
+                <MiniStat label="ROUTE DIST" value={routeMiles.toLocaleString()} unit="mi" />
+                <MiniStat label="AIRLINE" value={airlineCode(route?.airline)} />
+              </div>
+            )}
           </div>
+        )}
+
+        {(aircraftFacts || aircraftInfo?.manufacturer || typeCode) && (
+          <DossierSection title="AIRCRAFT DOSSIER">
+            <InfoRow label="Manufacturer" value={aircraftInfo?.manufacturer || aircraftFacts?.maker} />
+            <InfoRow label="Model family" value={aircraftFacts?.family} />
+            <InfoRow label="Type code" value={typeCode?.toUpperCase()} />
+            <InfoRow label="Mission" value={aircraftFacts?.role} />
+            <InfoRow label="Typical seats" value={aircraftFacts?.seats} />
+            <InfoRow label="Wake class" value={aircraftFacts?.wake} />
+            <InfoRow label="Length" value={aircraftFacts?.lengthFt ? `${aircraftFacts.lengthFt} ft` : null} />
+            <InfoRow label="Wingspan" value={aircraftFacts?.wingspanFt ? `${aircraftFacts.wingspanFt} ft` : null} />
+            <InfoRow label="Nominal range" value={aircraftFacts?.rangeNm ? `${aircraftFacts.rangeNm.toLocaleString()} nm` : null} />
+          </DossierSection>
+        )}
+
+        {(airlineFacts || route?.airline) && (
+          <DossierSection title="AIRLINE DOSSIER">
+            <InfoRow label="Name" value={route?.airline?.name || airline} />
+            <InfoRow label="Founded" value={airlineFacts?.founded} />
+            <InfoRow label="Headquarters" value={airlineFacts?.hq} />
+            <InfoRow label="Alliance" value={airlineFacts?.alliance} />
+            <InfoRow label="Country" value={route?.airline?.country || flight.origin_country} />
+          </DossierSection>
         )}
 
         {/* Live telemetry */}
@@ -224,6 +284,79 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function routeDistanceMiles(origin, dest) {
+  if (!origin || !dest) return null
+  const values = [origin.latitude, origin.longitude, dest.latitude, dest.longitude].map(Number)
+  if (values.some(v => !Number.isFinite(v))) return null
+  return Math.round(distanceMiles(values[0], values[1], values[2], values[3]))
+}
+
+function airlineCode(airline) {
+  if (!airline) return '—'
+  const code = airline.iata || airline.icao || '—'
+  return airline.country_iso ? `${code} / ${airline.country_iso}` : code
+}
+
+function DossierSection({ title, children }) {
+  return (
+    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5, marginBottom: 10 }}>
+        {title}
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr',
+        gap: 6,
+      }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function InfoRow({ label, value }) {
+  if (value === null || value === undefined || value === '') return null
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 12,
+      padding: '6px 0',
+      borderBottom: '1px solid rgba(255,255,255,0.04)',
+    }}>
+      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{label}</span>
+      <span style={{
+        fontSize: 11,
+        color: 'var(--heading)',
+        textAlign: 'right',
+        fontFamily: 'var(--font-mono)',
+        lineHeight: 1.3,
+      }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function MiniStat({ label, value, unit }) {
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.03)',
+      border: '1px solid var(--border)',
+      borderRadius: 5,
+      padding: '7px 8px',
+    }}>
+      <div style={{ fontSize: 8, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.3, marginBottom: 3 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--heading)', fontFamily: 'var(--font-mono)' }}>
+        {value}
+        {unit && <span style={{ fontSize: 9, color: 'var(--text-dim)', marginLeft: 4 }}>{unit}</span>}
       </div>
     </div>
   )

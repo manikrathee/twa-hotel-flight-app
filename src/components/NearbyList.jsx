@@ -1,5 +1,5 @@
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
-import { metersToFeet, msToKnots, headingToCardinal } from '../utils/geo'
+import { metersToFeet, msToKnots } from '../utils/geo'
 
 export default function NearbyList({ flights, selectedId, onSelect }) {
   const visible = flights.slice(0, 60)
