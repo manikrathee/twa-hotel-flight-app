@@ -1,0 +1,277 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]:
+                  - text: Platform
+                  - img [ref=e21]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]:
+                  - text: Solutions
+                  - img [ref=e26]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e31]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]:
+                  - text: Open Source
+                  - img [ref=e36]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]:
+                  - text: Enterprise
+                  - img [ref=e41]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+                  - generic [ref=e45]: Pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e53]: Search or jump to...
+              - img [ref=e55]
+            - link "Sign in" [ref=e59] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fmanikrathee%2Ftwa-hotel-flight-app%2Fpull%2F3
+            - link "Sign up" [ref=e60] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fvoltron%2Fpull_requests_fragments%2Fpull_request_layout&source=header-repo&source_repo=manikrathee%2Ftwa-hotel-flight-app
+            - button "Appearance settings" [ref=e63] [cursor=pointer]:
+              - img
+  - main [ref=e67]:
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e71]:
+          - img [ref=e72]
+          - link "manikrathee" [ref=e75] [cursor=pointer]:
+            - /url: /manikrathee
+          - generic [ref=e76]: /
+          - strong [ref=e77]:
+            - link "twa-hotel-flight-app" [ref=e78] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app
+          - generic [ref=e79]: Public
+        - generic [ref=e80]:
+          - list:
+            - listitem [ref=e81]:
+              - link "You must be signed in to change notification settings" [ref=e82] [cursor=pointer]:
+                - /url: /login?return_to=%2Fmanikrathee%2Ftwa-hotel-flight-app
+                - img [ref=e83]
+                - text: Notifications
+            - listitem [ref=e85]:
+              - link "Fork 0" [ref=e86] [cursor=pointer]:
+                - /url: /login?return_to=%2Fmanikrathee%2Ftwa-hotel-flight-app
+                - img [ref=e87]
+                - text: Fork
+                - generic "0" [ref=e89]
+            - listitem [ref=e90]:
+              - link "You must be signed in to star a repository" [ref=e92] [cursor=pointer]:
+                - /url: /login?return_to=%2Fmanikrathee%2Ftwa-hotel-flight-app
+                - img [ref=e93]
+                - text: Star
+                - generic "0 users starred this repository" [ref=e95]: "0"
+      - navigation "Repository" [ref=e96]:
+        - list [ref=e97]:
+          - listitem [ref=e98]:
+            - link "Code" [ref=e99] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app
+              - img [ref=e100]
+              - generic [ref=e102]: Code
+          - listitem [ref=e103]:
+            - link "Issues" [ref=e104] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app/issues
+              - img [ref=e105]
+              - generic [ref=e108]: Issues
+          - listitem [ref=e109]:
+            - link "Pull requests 1" [ref=e110] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app/pulls
+              - img [ref=e111]
+              - generic [ref=e113]: Pull requests
+              - generic "1" [ref=e114]
+          - listitem [ref=e115]:
+            - link "Actions" [ref=e116] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app/actions
+              - img [ref=e117]
+              - generic [ref=e119]: Actions
+          - listitem [ref=e120]:
+            - link "Projects" [ref=e121] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app/projects
+              - img [ref=e122]
+              - generic [ref=e124]: Projects
+          - listitem [ref=e125]:
+            - link "Security and quality" [ref=e126] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app/security
+              - img [ref=e127]
+              - generic [ref=e129]: Security and quality
+          - listitem [ref=e130]:
+            - link "Insights" [ref=e131] [cursor=pointer]:
+              - /url: /manikrathee/twa-hotel-flight-app/pulse
+              - img [ref=e132]
+              - generic [ref=e134]: Insights
+    - generic [ref=e141]:
+      - generic [ref=e144]:
+        - 'heading "[codex] Add README UI screenshots #3" [level=1] [ref=e146]':
+          - text: "[codex] Add README UI screenshots"
+          - generic [ref=e148]: "#3"
+        - generic [ref=e150]:
+          - generic [ref=e152]:
+            - img "Pull request" [ref=e153]
+            - text: Draft
+          - generic [ref=e156]:
+            - link "manikrathee" [ref=e157] [cursor=pointer]:
+              - /url: /manikrathee
+            - text: wants to merge 1 commit into
+            - generic [ref=e158]:
+              - link "main" [ref=e159] [cursor=pointer]:
+                - /url: /manikrathee/twa-hotel-flight-app/tree/main
+              - generic [ref=e160]: from
+              - generic [ref=e161]:
+                - link "fresh-main" [ref=e162] [cursor=pointer]:
+                  - /url: /manikrathee/twa-hotel-flight-app/tree/fresh-main
+                - button "Copy head branch name to clipboard" [ref=e163] [cursor=pointer]:
+                  - img [ref=e164]
+        - navigation "Pull request navigation tabs" [ref=e170]:
+          - tablist [ref=e171]:
+            - tab "Conversation" [selected] [ref=e172] [cursor=pointer]:
+              - img [ref=e173]
+              - text: Conversation
+            - tab "Commits (1)" [ref=e175] [cursor=pointer]:
+              - img [ref=e176]
+              - text: Commits
+              - generic [ref=e178]: "1"
+              - generic [ref=e179]: (1)
+            - tab "Checks" [ref=e180] [cursor=pointer]:
+              - img [ref=e181]
+              - text: Checks
+            - tab "Files changed" [ref=e183] [cursor=pointer]:
+              - img [ref=e184]
+              - text: Files changed
+      - generic [ref=e190]:
+        - generic [ref=e192]:
+          - heading "Conversation" [level=2] [ref=e193]
+          - generic [ref=e194]:
+            - generic [ref=e195]:
+              - generic [ref=e197]:
+                - link "@manikrathee" [ref=e198] [cursor=pointer]:
+                  - /url: /manikrathee
+                  - img "@manikrathee" [ref=e199]
+                - generic [ref=e201]:
+                  - generic [ref=e202]:
+                    - generic [ref=e203]:
+                      - group [ref=e205]:
+                        - button "Show options" [ref=e206] [cursor=pointer]:
+                          - img "Show options" [ref=e209]
+                      - generic "This user is the owner of the twa-hotel-flight-app repository." [ref=e212]:
+                        - generic [ref=e213]: Owner
+                    - heading "manikrathee commented May 16, 20264 minutes ago" [level=3] [ref=e214]:
+                      - generic [ref=e215]:
+                        - strong [ref=e216]:
+                          - link "manikrathee" [ref=e217] [cursor=pointer]:
+                            - /url: /manikrathee
+                        - text: commented
+                        - link "May 16, 20264 minutes ago" [ref=e218] [cursor=pointer]:
+                          - /url: "#issue-4461314424"
+                  - generic [ref=e222]:
+                    - heading "Summary" [level=2] [ref=e223]
+                    - list [ref=e224]:
+                      - listitem [ref=e225]: Add high-resolution UI screenshots for loading, API error, traffic overview, selected flight detail, and expanded flight path states.
+                      - listitem [ref=e226]: Embed the screenshots in the README for quick visual review.
+                    - heading "Validation" [level=2] [ref=e227]
+                    - list [ref=e228]:
+                      - listitem [ref=e229]: Ran the Vite app locally.
+                      - listitem [ref=e230]: Captured screenshots in Playwright using mocked API responses for deterministic UI states.
+                      - listitem [ref=e231]:
+                        - text: Verified image dimensions with
+                        - code [ref=e232]: sips
+                        - text: .
+                      - listitem [ref=e233]:
+                        - text: Ran
+                        - code [ref=e234]: imageoptim
+                        - text: ; it completed with 0% size savings and macOS AppleScript warnings, leaving valid PNGs unchanged.
+              - generic [ref=e239]:
+                - img [ref=e241]
+                - generic [ref=e246]:
+                  - link "@manikrathee" [ref=e249] [cursor=pointer]:
+                    - /url: /manikrathee
+                    - img "@manikrathee" [ref=e250]
+                  - code [ref=e252]:
+                    - 'link "docs: add app screenshots to readme" [ref=e253] [cursor=pointer]':
+                      - /url: /manikrathee/twa-hotel-flight-app/pull/3/commits/6d61c26db66ce987544c903175ac63d49b5d5d68
+                  - code [ref=e263]:
+                    - link "6d61c26" [ref=e264] [cursor=pointer]:
+                      - /url: /manikrathee/twa-hotel-flight-app/pull/3/commits/6d61c26db66ce987544c903175ac63d49b5d5d68
+            - generic [ref=e268]:
+              - link "Sign up for free" [ref=e269] [cursor=pointer]:
+                - /url: /join?source=comment-repo
+              - strong [ref=e270]: to join this conversation on GitHub
+              - text: . Already have an account?
+              - link "Sign in to comment" [ref=e271] [cursor=pointer]:
+                - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fmanikrathee%2Ftwa-hotel-flight-app%2Fpull%2F3
+        - generic [ref=e275]:
+          - form "Select reviewers" [ref=e277]:
+            - heading "Reviewers" [level=3] [ref=e278]
+            - text: No reviews
+          - form "Select assignees" [ref=e280]:
+            - heading "Assignees" [level=3] [ref=e281]
+            - text: No one assigned
+          - generic [ref=e282]:
+            - heading "Labels" [level=3] [ref=e283]
+            - generic [ref=e284]: None yet
+          - form "Select projects" [ref=e286]:
+            - heading "Projects" [level=3] [ref=e287]
+            - text: None yet
+          - form "Select milestones" [ref=e289]:
+            - heading "Milestone" [level=3] [ref=e290]
+            - text: No milestone
+          - form "Link issues" [ref=e296]:
+            - heading "Development" [level=3] [ref=e297]
+            - paragraph [ref=e298]: Successfully merging this pull request may close these issues.
+            - paragraph [ref=e300]: None yet
+          - generic [ref=e302]:
+            - heading "1 participant" [level=3] [ref=e303]
+            - link "@manikrathee" [ref=e305] [cursor=pointer]:
+              - /url: /manikrathee
+              - img "@manikrathee" [ref=e306]
+  - contentinfo [ref=e307]:
+    - heading "Footer" [level=2] [ref=e308]
+    - generic [ref=e309]:
+      - generic [ref=e310]:
+        - link "GitHub Homepage" [ref=e311] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e312]
+        - generic [ref=e314]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e315]:
+        - heading "Footer navigation" [level=3] [ref=e316]
+        - list "Footer navigation" [ref=e317]:
+          - listitem [ref=e318]:
+            - link "Terms" [ref=e319] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e320]:
+            - link "Privacy" [ref=e321] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e322]:
+            - link "Security" [ref=e323] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e324]:
+            - link "Status" [ref=e325] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e326]:
+            - link "Community" [ref=e327] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e328]:
+            - link "Docs" [ref=e329] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e330]:
+            - link "Contact" [ref=e331] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e332]:
+            - button "Manage cookies" [ref=e334] [cursor=pointer]
+          - listitem [ref=e335]:
+            - button "Do not share my personal information" [ref=e337] [cursor=pointer]

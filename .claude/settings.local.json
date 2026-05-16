@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:openskynetwork.github.io)",
+      "Bash(npm run *)",
+      "Bash(agent-browser open *)",
+      "Bash(agent-browser screenshot *)",
+      "Bash(agent-browser get *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
+    ]
+  }
+}
