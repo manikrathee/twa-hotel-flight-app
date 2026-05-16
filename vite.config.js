@@ -5,6 +5,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/api/opensky-auth': {
+        target: 'https://auth.opensky-network.org',
+        changeOrigin: true,
+        rewrite: () => '/auth/realms/opensky-network/protocol/openid-connect/token',
+        secure: true,
+      },
       '/api/opensky': {
         target: 'https://opensky-network.org',
         changeOrigin: true,

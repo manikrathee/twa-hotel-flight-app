@@ -1,4 +1,5 @@
 import { record429, recordSuccess } from './rateLimitManager'
+import { getAccessToken, invalidateToken } from './openskyAuth'
 
 const BASE = '/api/opensky'
 
@@ -27,9 +28,24 @@ function parseStates(states) {
   }))
 }
 
+async function authHeaders() {
+  const token = await getAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function apiFetch(url, options = {}, retry = true) {
+  const headers = { ...await authHeaders(), ...options.headers }
+  const res = await fetch(url, { ...options, headers })
+  if (res.status === 401 && retry) {
+    invalidateToken()
+    return apiFetch(url, options, false)
+  }
+  return res
+}
+
 export async function fetchFlights() {
   const { lamin, lomin, lamax, lomax } = BBOX
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`,
     { signal: AbortSignal.timeout(12000) }
   )
@@ -46,7 +62,7 @@ export async function fetchFlights() {
 }
 
 export async function fetchTrack(icao24, signal) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/tracks/all?icao24=${icao24.toLowerCase()}&time=0`,
     { signal: signal ?? AbortSignal.timeout(10000) }
   )
@@ -60,7 +76,7 @@ export async function fetchTrack(icao24, signal) {
 }
 
 export async function fetchAircraftMeta(icao24, signal) {
-  const res = await fetch(
+  const res = await apiFetch(
     `${BASE}/metadata/aircraft/icao/${icao24.toLowerCase()}`,
     { signal: signal ?? AbortSignal.timeout(8000) }
   )
