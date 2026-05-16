@@ -2,6 +2,28 @@
 
 Live JFK-area traffic display for the TWA Hotel.
 
+## Screenshots
+
+### Loading
+
+<img src="docs/screenshots/01-loading.png" alt="Loading state while acquiring traffic" width="900">
+
+### API Error
+
+<img src="docs/screenshots/02-api-error.png" alt="OpenSky API error state" width="900">
+
+### Traffic Overview
+
+<img src="docs/screenshots/03-traffic-overview.png" alt="JFK traffic map overview with nearby aircraft list" width="900">
+
+### Flight Detail
+
+<img src="docs/screenshots/04-flight-detail.png" alt="Selected flight detail panel with aircraft and airline dossiers" width="900">
+
+### Flight Path
+
+<img src="docs/screenshots/05-flight-path.png" alt="Expanded flight path and altitude history view" width="900">
+
 ## Data Sources
 
 - OpenSky Network state vectors: live ADS-B position, altitude, speed, heading, vertical rate, squawk.
