@@ -38,8 +38,11 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
   const routeMiles = routeDistanceMiles(origin, dest)
 
   // Contact freshness
-  const lastContactAgo = flight.last_contact
-    ? Math.round(Date.now() / 1000 - flight.last_contact)
+  const lastContactLagSec = flight.last_contact && flight.time_position
+    ? Math.max(0, flight.last_contact - flight.time_position)
+    : null
+  const lastContactStamp = flight.last_contact
+    ? `${new Date(flight.last_contact * 1000).toUTCString().slice(17, 25)} UTC`
     : null
 
   // Squawk analysis
@@ -61,11 +64,12 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
     <div style={{
       width: '100%',
       height: '100%',
-      background: 'rgba(4,4,18,0.99)',
-      borderLeft: '1px solid rgba(0,212,200,0.18)',
+      background: 'rgba(8,13,20,0.98)',
+      borderLeft: '1px solid rgba(0,212,200,0.22)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
+      animation: 'slide-right 0.22s ease',
     }}>
 
       {/* ── Header ───────────────────────────────────── */}
@@ -79,10 +83,10 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         background: 'linear-gradient(180deg, rgba(0,212,200,0.07) 0%, transparent 100%)',
       }}>
         <div>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-display)', color: 'var(--text-dim)', letterSpacing: 3, marginBottom: 3 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 0.2, marginBottom: 3, fontWeight: 600 }}>
             FLIGHT DETAIL
           </div>
-          <div style={{ fontSize: 32, fontFamily: 'var(--font-display)', color: 'var(--cyan)', letterSpacing: 4, lineHeight: 1 }}>
+          <div style={{ fontSize: 22, color: 'var(--cyan)', letterSpacing: 0.3, lineHeight: 1, fontWeight: 700 }}>
             {flightNum || callsign}
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 4, fontFamily: 'var(--font-ui)' }}>
@@ -95,7 +99,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             style={{
               background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5,
               color: 'var(--text-dim)', cursor: 'pointer', padding: '7px 14px',
-              fontSize: 11, fontFamily: 'var(--font-display)', letterSpacing: 2,
+              fontSize: 12, fontWeight: 600, letterSpacing: 0.2,
               transition: 'border-color 0.15s, color 0.15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = 'var(--text)' }}
@@ -103,7 +107,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           >
             ✕ CLOSE
           </button>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: phaseColor, letterSpacing: 1 }}>
+          <div style={{ fontSize: 12, color: phaseColor, fontWeight: 600 }}>
             {phaseArrow} {phase}
           </div>
         </div>
@@ -125,12 +129,12 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             }
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-display)', letterSpacing: 3 }}>AIRCRAFT</div>
-            <div style={{ fontSize: 18, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600, letterSpacing: 0.2 }}>AIRCRAFT</div>
+            <div style={{ fontSize: 15, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
               {loading && !typeCode ? '...' : (model || 'Unknown')}
             </div>
             {registration && (
-              <div style={{ fontSize: 15, color: 'var(--cyan)', fontFamily: 'var(--font-mono)', marginTop: 5, letterSpacing: 1.5 }}>
+              <div style={{ fontSize: 13, color: 'var(--cyan)', marginTop: 5, fontWeight: 600 }}>
                 {registration}
               </div>
             )}
@@ -162,16 +166,15 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             <BigStat label="HEADING" value={`${hdg}°`} unit="" sub={cardinal} color="var(--text)" />
             <BigStat label="DIST · JFK" value={distMi} unit="mi"
               sub={`${Math.round(flight.distKm)} km`} color="var(--text)" />
-            {lastContactAgo !== null
-              ? <BigStat label="LAST CONTACT" value={lastContactAgo < 60 ? lastContactAgo : Math.round(lastContactAgo / 60)}
-                  unit={lastContactAgo < 60 ? 'sec' : 'min'}
-                  color={lastContactAgo > 45 ? 'var(--amber)' : 'var(--green)'} />
+            {lastContactLagSec !== null
+              ? <BigStat label="CONTACT LAG" value={lastContactLagSec} unit="sec"
+                  color={lastContactLagSec > 45 ? 'var(--amber)' : 'var(--green)'} />
               : geoAltFt && <BigStat label="GEO ALT" value={geoAltFt.toLocaleString()} unit="ft"
                   sub={altDeltaFt != null ? `Δ ${altDeltaFt > 0 ? '+' : ''}${altDeltaFt} ft` : null}
                   color="var(--text-dim)" />
             }
           </div>
-          {geoAltFt && lastContactAgo !== null && (
+          {geoAltFt && lastContactLagSec !== null && (
             <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
               <BigStat label="GEO ALT" value={geoAltFt.toLocaleString()} unit="ft"
                 sub={altDeltaFt != null ? `Δ ${altDeltaFt > 0 ? '+' : ''}${altDeltaFt} ft` : null}
@@ -184,7 +187,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         <div style={{ padding: '14px 22px', borderBottom: '1px solid rgba(0,212,200,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <SectionLabel>ALTITUDE PROFILE</SectionLabel>
-            <span style={{ fontSize: 13, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 13, color: 'var(--cyan)', fontWeight: 600 }}>
               FL{Math.round(altFt / 100).toString().padStart(3, '0')}
             </span>
           </div>
@@ -200,7 +203,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: '100%', height: 1, background: 'repeating-linear-gradient(90deg, rgba(0,212,200,0.45) 0, rgba(0,212,200,0.45) 5px, transparent 5px, transparent 10px)' }} />
                 {routeMiles && (
-                  <span style={{ fontSize: 12, color: 'rgba(0,212,200,0.65)', fontFamily: 'var(--font-mono)', letterSpacing: 0.5 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(0,212,200,0.65)', letterSpacing: 0.1 }}>
                     {routeMiles.toLocaleString()} mi
                   </span>
                 )}
@@ -217,7 +220,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
               <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-dim)' }}>
                 {route.airline.name}
                 {(route.airline.iata || route.airline.icao) && (
-                  <span style={{ marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'rgba(0,212,200,0.55)' }}>
+                  <span style={{ marginLeft: 8, fontSize: 12, color: 'rgba(0,212,200,0.55)', fontWeight: 600 }}>
                     {[route.airline.iata, route.airline.icao].filter(Boolean).join(' / ')}
                   </span>
                 )}
@@ -236,10 +239,10 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           {flight.time_position && (
             <InfoRow label="Position fix" value={new Date(flight.time_position * 1000).toUTCString().slice(17, 25) + ' UTC'} mono />
           )}
-          {lastContactAgo != null && (
+          {lastContactStamp && (
             <InfoRow label="Last contact"
-              value={lastContactAgo < 60 ? `${lastContactAgo}s ago` : `${Math.round(lastContactAgo / 60)}m ago`}
-              color={lastContactAgo > 60 ? 'var(--amber)' : undefined} />
+              value={lastContactStamp}
+              color={lastContactLagSec != null && lastContactLagSec > 45 ? 'var(--amber)' : undefined} />
           )}
         </DossierSection>
 
@@ -287,13 +290,13 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             onMouseEnter={e => { e.currentTarget.style.color = 'var(--cyan)' }}
             onMouseLeave={e => { if (!showPath) e.currentTarget.style.color = 'var(--text-dim)' }}
           >
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-display)', letterSpacing: 3 }}>
+            <span style={{ fontSize: 12, letterSpacing: 0.2, fontWeight: 600 }}>
               FLIGHT PATH
               <span style={{ marginLeft: 8, opacity: 0.6 }}>
                 {track ? '· READY' : loading ? '· LOADING' : '· NO DATA'}
               </span>
             </span>
-            <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', display: 'inline-block', transform: showPath ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
+            <span style={{ fontSize: 13, display: 'inline-block', transform: showPath ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
           </button>
           {showPath && track && (
             <div style={{ marginTop: 14, animation: 'fade-in 0.2s ease' }}>
@@ -301,7 +304,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
             </div>
           )}
           {showPath && !track && loading && (
-            <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13, fontFamily: 'var(--font-mono)' }}>
+            <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
               Fetching path data…
             </div>
           )}
@@ -330,7 +333,7 @@ function routeDistanceMiles(origin, dest) {
 
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 3, marginBottom: 12 }}>
+    <div style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600, letterSpacing: 0.2, marginBottom: 10 }}>
       {children}
     </div>
   )
@@ -345,8 +348,8 @@ function IdentBadge({ label, value, alert }) {
       border: `1px solid ${alert ? 'rgba(227,30,38,0.35)' : 'rgba(255,255,255,0.1)'}`,
       borderRadius: 5, padding: '4px 10px',
     }}>
-      <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 2 }}>{label}</span>
-      <span style={{ fontSize: 13, color: alert ? 'var(--red)' : 'var(--heading)', fontFamily: 'var(--font-mono)', letterSpacing: 0.5 }}>{value}</span>
+      <span style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.2 }}>{label}</span>
+      <span style={{ fontSize: 13, color: alert ? 'var(--red)' : 'var(--heading)', fontWeight: 600, letterSpacing: 0.1 }}>{value}</span>
     </div>
   )
 }
@@ -358,16 +361,17 @@ function BigStat({ label, value, unit, sub, color, bar }) {
       border: '1px solid rgba(255,255,255,0.07)',
       borderRadius: 6,
       padding: '10px 12px',
+      animation: 'metric-pop 0.28s ease both',
     }}>
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 2, marginBottom: 5 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.2, marginBottom: 5 }}>
         {label}
       </div>
-      <div style={{ fontSize: 22, fontFamily: 'var(--font-mono)', color: color || 'var(--heading)', lineHeight: 1.1 }}>
+      <div style={{ fontSize: 17, color: color || 'var(--heading)', lineHeight: 1.1, fontWeight: 700 }}>
         {value}
         {unit && <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 4 }}>{unit}</span>}
       </div>
       {sub && (
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>{sub}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 3 }}>{sub}</div>
       )}
       {bar !== undefined && (
         <div style={{ marginTop: 7, height: 2, background: 'rgba(255,255,255,0.07)', borderRadius: 1 }}>
@@ -401,8 +405,8 @@ function InfoRow({ label, value, mono, color }) {
       <span style={{
         fontSize: 13, color: color || 'var(--heading)',
         textAlign: 'right',
-        fontFamily: mono ? 'var(--font-mono)' : 'var(--font-ui)',
-        letterSpacing: mono ? 0.5 : 0,
+        fontFamily: 'var(--font-ui)',
+        letterSpacing: mono ? 0.1 : 0,
         lineHeight: 1.4,
       }}>
         {value}
@@ -414,8 +418,8 @@ function InfoRow({ label, value, mono, color }) {
 function MiniKV({ label, value }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 5, padding: '6px 10px' }}>
-      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 2, marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 14, color: 'var(--heading)', fontFamily: 'var(--font-mono)' }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.2, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>{value}</div>
     </div>
   )
 }
@@ -424,7 +428,7 @@ function AirportBadge({ airport }) {
   if (!airport) return <div style={{ width: 70 }} />
   return (
     <div style={{ textAlign: 'center', minWidth: 70 }}>
-      <div style={{ fontSize: 28, fontFamily: 'var(--font-display)', color: 'var(--heading)', letterSpacing: 2, lineHeight: 1 }}>
+      <div style={{ fontSize: 18, color: 'var(--heading)', letterSpacing: 0.2, lineHeight: 1, fontWeight: 700 }}>
         {airport.iata_code || airport.icao_code || '—'}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4, lineHeight: 1.3 }}>
@@ -447,7 +451,7 @@ function AltitudeBar({ altFt, vrFpm }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
         {levels.map(l => (
-          <span key={l} style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+          <span key={l} style={{ fontSize: 11, color: 'var(--text-dim)' }}>
             {l === 0 ? 'GND' : `${Math.round(l / 1000)}k`}
           </span>
         ))}
@@ -474,10 +478,10 @@ function AltitudeBar({ altFt, vrFpm }) {
         ))}
       </div>
       <div style={{ marginTop: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           {isClimbing ? '↑ CLIMBING' : isDescending ? '↓ DESCENDING' : '— LEVEL CRUISE'}
         </span>
-        <span style={{ fontSize: 12, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--cyan)', fontWeight: 600 }}>
           {altFt.toLocaleString()} ft
         </span>
       </div>

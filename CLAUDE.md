@@ -43,21 +43,21 @@ App.jsx  ──── selectedFlight ────►  useFlightDetail (per-selec
               aircraftInfo                 └─ api/adsbdb.js (route + aircraft)
 ```
 
-`App.jsx` owns all state: `selectedId`, `track`, `theme`. Everything else is derived. The `theme` string (`'dark'|'light'`) is threaded as a prop to every component — HUDBar, FlightMap, NearbyList, FlightDetail all receive it.
+`App.jsx` owns all state: `selectedId`, `track`, `listWidth`, `detailWidth`. Everything else is derived.
 
 ### Component responsibilities
 
-- **HUDBar** — top status bar: live count, weather, clock, theme toggle. Receives `theme` + `onThemeToggle`.
-- **NearbyList** — left sidebar listing flights sorted by distance from JFK. Width 442px (scaled). Click selects a flight.
-- **FlightMap** — MapLibre GL map filling remaining space. Manages its own map lifecycle via refs. Re-initializes on `theme` change (dependency in the init `useEffect`). Displays runways, plane icons (SDF), hotel marker, flight path, and runway bearing preset buttons.
-- **FlightDetail** — absolute overlay (`detail-overlay` CSS class, 594px wide) sliding in from the right without reflowing the map. Shows aircraft dossier, route, live telemetry, altitude profile, and interactive altitude history chart.
+- **HUDBar** — top status bar: live count, weather, clock, API state, and panel width controls.
+- **NearbyList** — left sidebar listing flights sorted by distance from JFK. Width is adjustable from the HUD.
+- **FlightMap** — MapLibre GL map filling remaining space. Manages its own map lifecycle via refs. Displays runways, plane icons (SDF), hotel marker, flight path, and runway bearing preset buttons.
+- **FlightDetail** — absolute overlay (`detail-overlay` CSS class) sliding in from the right without reflowing the map. Width is adjustable from the HUD.
 - **FlightPath** — SVG altitude chart with hover interaction, rendered inside FlightDetail.
 - **AircraftSilhouette** — pure SVG top-down aircraft drawings, categorized by type code (narrowbody / widebody / quad / regional / turboprop). Used when no aircraft photo is available.
 
 ### Map layer stack (MapLibre GL)
 
 The map is initialized once in a `useEffect`. Layer order from bottom:
-1. CartoDB raster tiles (dark or light based on `theme`)
+1. CartoDB dark raster tiles
 2. `runways-glow` — thick blurred runway highlight
 3. `runways-surface` — paved area
 4. `runways-center` — dashed centerline
@@ -74,6 +74,4 @@ DOM markers (not map layers): runway threshold labels, TWA Hotel dot, pulse-ring
 
 ### Styling conventions
 
-All styling is inline React styles. CSS variables in `index.css` `:root` handle the color system; `[data-theme="light"]` overrides them for light mode. The `--panel` variable is set to a translucent `rgba()` value so `backdropFilter: blur()` works on panels.
-
-UI is scaled **1.65×** from a 14px base — all pixel values in components reflect this (e.g., HUDBar height 86px, NearbyList width 442px, FlightDetail width 594px, body `font-size: 23px`). When adding new UI, multiply your reference px values by 1.65.
+Styling is mostly inline React styles with shared CSS tokens in `src/index.css`. Typography is Inter-first with a compact 12–14px baseline and single dark theme.

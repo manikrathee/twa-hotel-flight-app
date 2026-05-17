@@ -3,6 +3,11 @@ import { weatherCodeToCondition, estimateActiveRunways } from '../api/weather'
 import { headingToCardinal } from '../utils/geo'
 import ApiStatusIndicator from './ApiStatusIndicator'
 
+const LIST_MIN = 320
+const LIST_MAX = 560
+const DETAIL_MIN = 420
+const DETAIL_MAX = 760
+
 function Clock() {
   const [time, setTime] = useState(new Date())
   useEffect(() => {
@@ -10,39 +15,91 @@ function Clock() {
     return () => clearInterval(id)
   }, [])
   const utc = time.toUTCString().slice(17, 25)
-  const local = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'America/New_York' })
+  const local = time.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'America/New_York',
+  })
   return (
-    <div style={{ display: 'flex', gap: 26, alignItems: 'center' }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 21, color: 'var(--heading)', letterSpacing: 2 }}>
-        {local} <span style={{ color: 'var(--text-dim)', fontSize: 18 }}>LCL</span>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <span style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>
+        {local}
       </span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: 'var(--text-dim)', letterSpacing: 1 }}>
-        {utc}Z
-      </span>
+      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{utc}Z</span>
     </div>
   )
 }
 
 function DataSourceBadge({ dataSource }) {
   if (!dataSource || dataSource.type === 'live') return null
-  const ago = dataSource.cachedAt ? Math.round((Date.now() - dataSource.cachedAt.getTime()) / 60000) : null
-  const label = ago !== null ? `DB CACHE · ${ago < 1 ? '<1' : ago}m ago` : 'DB CACHE'
+  const stamp = dataSource.cachedAt
+    ? dataSource.cachedAt.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'America/New_York',
+      })
+    : null
+  const label = stamp ? `CACHE · ${stamp}` : 'CACHE'
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 7,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
       background: 'rgba(255,180,0,0.08)',
       border: '1px solid rgba(255,180,0,0.3)',
-      borderRadius: 4, padding: '3px 10px', marginRight: 20,
+      borderRadius: 999,
+      padding: '3px 9px',
+      marginRight: 8,
+      fontSize: 12,
+      color: 'var(--amber)',
+      fontWeight: 600,
     }}>
-      <span style={{ fontSize: 9, color: 'var(--amber)', opacity: 0.7 }}>⬡</span>
-      <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--amber)', letterSpacing: 2 }}>
-        {label}
-      </span>
+      <span style={{ fontSize: 9, opacity: 0.7 }}>⬡</span>
+      <span>{label}</span>
     </div>
   )
 }
 
-export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil, lastUpdated, isStale, dataSource, theme, onThemeToggle }) {
+function PanelControl({ label, min, max, value, onChange }) {
+  return (
+    <label style={{
+      display: 'grid',
+      gridTemplateColumns: '52px minmax(120px, 180px) 38px',
+      alignItems: 'center',
+      gap: 8,
+      fontSize: 12,
+      color: 'var(--text-dim)',
+    }}>
+      <span>{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{ accentColor: 'var(--cyan)', cursor: 'ew-resize' }}
+      />
+      <span style={{ color: 'var(--heading)', textAlign: 'right', fontFeatureSettings: '"tnum"' }}>{value}</span>
+    </label>
+  )
+}
+
+export default function HUDBar({
+  flights,
+  weather,
+  rateLimitStatus,
+  backoffUntil,
+  lastUpdated,
+  isStale,
+  dataSource,
+  listWidth,
+  detailWidth,
+  onListWidthChange,
+  onDetailWidthChange,
+}) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
   const windSpd = weather ? Math.round(weather.wind_speed_10m) : null
@@ -54,125 +111,77 @@ export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil
   const blocked = rateLimitStatus === 'blocked'
 
   return (
-    <div style={{
-      height: 86,
-      background: 'var(--panel)',
-      borderBottom: '1px solid var(--border-bright)',
-      boxShadow: '0 1px 0 rgba(0,212,200,0.06), 0 4px 40px rgba(0,0,0,0.6)',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '0 33px',
-      gap: 0,
-      flexShrink: 0,
-      backdropFilter: 'blur(16px)',
-      position: 'relative',
-      zIndex: 100,
-    }}>
-      {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 46 }}>
-        <div style={{
-          background: 'white',
-          borderRadius: 8,
-          padding: '5px 8px',
-          display: 'flex',
-          alignItems: 'center',
-          boxShadow: '0 0 10px rgba(227,30,38,0.25)',
-        }}>
-          <img src="/twa-logo.png" alt="TWA Hotel" height={50} style={{ display: 'block' }} />
+    <div className="hudbar">
+      <div className="hudbar-main">
+        <div className="hudbar-logo">
+          <img src="/twa-logo.png" alt="TWA Hotel" height={34} style={{ display: 'block' }} />
+          <div style={{ lineHeight: 1.1 }}>
+            <div style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 700 }}>TWA Flight Deck</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>KJFK · Hotel Ops</div>
+          </div>
         </div>
-        <div style={{ fontSize: 18, color: 'var(--text-dim)', letterSpacing: 3, fontFamily: 'var(--font-display)' }}>
-          FLIGHT DECK
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: blocked ? 'var(--red)' : 'var(--green)',
+            animation: 'pulse-dot 1.4s ease-in-out infinite',
+            boxShadow: blocked ? '0 0 8px var(--red)' : '0 0 8px var(--green)',
+          }} />
+          <span style={{ fontSize: 12, color: blocked ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
+            LIVE
+          </span>
+        </div>
+
+        <DataSourceBadge dataSource={dataSource} />
+        <ApiStatusIndicator
+          status={rateLimitStatus || 'ok'}
+          backoffUntil={backoffUntil}
+          lastUpdated={lastUpdated}
+          isStale={isStale}
+        />
+
+        <div className="hudbar-stats">
+          <HUDStat label="Aircraft" value={airborne || '—'} />
+          {weather && <HUDStat label="Wind" value={`${cardinal} ${windSpd} mph`} />}
+          {weather && windGust > windSpd + 5 && <HUDStat label="Gust" value={`${windGust} mph`} color="var(--amber)" />}
+          {weather && <HUDStat label="Temp" value={`${temp}°F`} />}
+          {weather && condition && <HUDStat label="Sky" value={condition} />}
+          {weather && runways.length > 0 && <HUDStat label="Runways" value={runways.join(' · ')} color="var(--amber)" />}
+        </div>
+
+        <div style={{ marginLeft: 'auto' }}>
+          <Clock />
         </div>
       </div>
 
-      <div style={{ width: 1, height: 46, background: 'var(--border)', marginRight: 33 }} />
-
-      {/* Live indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: 33 }}>
-        <div style={{
-          width: 12, height: 12, borderRadius: '50%',
-          background: blocked ? 'var(--red)' : 'var(--green)',
-          animation: 'pulse-dot 1.4s ease-in-out infinite',
-          boxShadow: blocked ? '0 0 8px var(--red)' : '0 0 8px var(--green)',
-        }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, color: blocked ? 'var(--red)' : 'var(--green)', letterSpacing: 1.5, fontWeight: 500 }}>
-          LIVE
-        </span>
+      <div className="hudbar-controls">
+        <PanelControl
+          label="Traffic"
+          min={LIST_MIN}
+          max={LIST_MAX}
+          value={listWidth}
+          onChange={onListWidthChange}
+        />
+        <PanelControl
+          label="Detail"
+          min={DETAIL_MIN}
+          max={DETAIL_MAX}
+          value={detailWidth}
+          onChange={onDetailWidthChange}
+        />
       </div>
-
-      {/* DB cache source — only shown when not live */}
-      <DataSourceBadge dataSource={dataSource} />
-
-      {/* API rate limit status — only shown when non-ok */}
-      <ApiStatusIndicator
-        status={rateLimitStatus || 'ok'}
-        backoffUntil={backoffUntil}
-        lastUpdated={lastUpdated}
-        isStale={isStale}
-      />
-
-      {/* Airborne count */}
-      <HUDStat label="AIRCRAFT" value={airborne || '—'} unit="" color="var(--cyan)" />
-      <Divider />
-
-      {/* Weather */}
-      {weather && <>
-        <HUDStat label="WIND" value={`${cardinal} ${windSpd}`} unit="mph" />
-        {windGust > windSpd + 5 && <HUDStat label="GUST" value={windGust} unit="mph" color="var(--amber)" />}
-        <HUDStat label="TEMP" value={`${temp}°`} unit="F" />
-        <HUDStat label="SKY" value={condition} unit="" />
-        {runways.length > 0 && <HUDStat label="ACTIVE RWY" value={runways.join(' · ')} unit="" color="var(--amber)" />}
-        <Divider />
-      </>}
-
-      {/* JFK location tag */}
-      <div style={{ marginRight: 'auto', fontSize: 18, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1 }}>
-        KJFK · TWA HOTEL · 40.64°N 73.78°W
-      </div>
-
-      {/* Clock */}
-      <Clock />
-
-      <div style={{ width: 1, height: 46, background: 'var(--border)', marginLeft: 20 }} />
-      <button
-        onClick={onThemeToggle}
-        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        style={{
-          background: 'none',
-          border: '1px solid var(--border-bright)',
-          borderRadius: 6,
-          color: 'var(--cyan)',
-          cursor: 'pointer',
-          padding: '6px 14px',
-          fontFamily: 'var(--font-display)',
-          fontSize: 13,
-          letterSpacing: 2,
-          marginLeft: 20,
-          transition: 'border-color 0.15s, background 0.15s',
-          flexShrink: 0,
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--cyan-glow)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-      >
-        {theme === 'dark' ? '◐ LIGHT' : '◑ DARK'}
-      </button>
     </div>
   )
 }
 
-function HUDStat({ label, value, unit, color = 'var(--text)' }) {
+function HUDStat({ label, value, color = 'var(--heading)' }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginRight: 33 }}>
-      <span style={{ fontSize: 13, color: 'var(--text-dim)', letterSpacing: 2, fontFamily: 'var(--font-display)', textTransform: 'uppercase', lineHeight: 1.2 }}>
-        {label}
-      </span>
-      <span style={{ fontSize: 25, fontFamily: 'var(--font-mono)', color, fontWeight: 400, letterSpacing: 0.5, lineHeight: 1.2 }}>
-        {value}{unit ? <span style={{ fontSize: 17, color: 'var(--text-dim)', marginLeft: 5 }}>{unit}</span> : null}
-      </span>
+    <div style={{ display: 'grid', gap: 2 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{label}</span>
+      <span style={{ fontSize: 13, color, fontWeight: 600, whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   )
-}
-
-function Divider() {
-  return <div style={{ width: 1, height: 46, background: 'var(--border)', marginRight: 33 }} />
 }

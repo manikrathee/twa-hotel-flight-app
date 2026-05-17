@@ -6,11 +6,20 @@ import FlightDetail from './components/FlightDetail'
 import useFlights from './hooks/useFlights'
 import useWeather from './hooks/useWeather'
 
+const LIST_PANEL_MIN = 320
+const LIST_PANEL_MAX = 560
+const DETAIL_PANEL_MIN = 420
+const DETAIL_PANEL_MAX = 760
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v))
+}
+
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [track, setTrack] = useState(null)
-  const [theme, setTheme] = useState('dark')
-  const toggleTheme = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), [])
+  const [listWidth, setListWidth] = useState(390)
+  const [detailWidth, setDetailWidth] = useState(560)
   const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource } = useFlights()
   const { weather } = useWeather()
 
@@ -31,26 +40,38 @@ export default function App() {
 
   if (error && flights.length === 0) {
     return (
-      <div className="app" data-theme={theme}>
-        <HUDBar flights={[]} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} dataSource={dataSource} theme={theme} onThemeToggle={toggleTheme} />
+      <div className="app">
+        <HUDBar
+          flights={[]}
+          weather={weather}
+          rateLimitStatus={rateLimitStatus}
+          backoffUntil={backoffUntil}
+          lastUpdated={lastUpdated}
+          isStale={isStale}
+          dataSource={dataSource}
+          listWidth={listWidth}
+          detailWidth={detailWidth}
+          onListWidthChange={v => setListWidth(clamp(v, LIST_PANEL_MIN, LIST_PANEL_MAX))}
+          onDetailWidthChange={v => setDetailWidth(clamp(v, DETAIL_PANEL_MIN, DETAIL_PANEL_MAX))}
+        />
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 10,
+          alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
           <div style={{
-            width: 79, height: 79, borderRadius: '50%',
+            width: 58, height: 58, borderRadius: '50%',
             border: '1px solid rgba(227,30,38,0.4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 0 24px rgba(227,30,38,0.12)',
-            marginBottom: 8,
+            marginBottom: 6,
           }}>
-            <span style={{ fontSize: 33, color: 'var(--red)' }}>⚠</span>
+            <span style={{ fontSize: 24, color: 'var(--red)' }}>⚠</span>
           </div>
-          <div style={{ fontSize: 25, fontFamily: 'var(--font-display)', color: 'var(--text)', letterSpacing: 3 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--heading)', letterSpacing: 0.2 }}>
             NO ADS-B FEED
           </div>
-          <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', color: 'var(--red-dim)', letterSpacing: 1 }}>{error}</div>
-          <div style={{ fontSize: 17, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', opacity: 0.6, marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1 }}>{error}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', opacity: 0.8, marginTop: 2 }}>
             Retrying automatically every 15 seconds
           </div>
         </div>
@@ -59,8 +80,20 @@ export default function App() {
   }
 
   return (
-    <div className="app" data-theme={theme}>
-      <HUDBar flights={flights} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} dataSource={dataSource} theme={theme} onThemeToggle={toggleTheme} />
+    <div className="app">
+      <HUDBar
+        flights={flights}
+        weather={weather}
+        rateLimitStatus={rateLimitStatus}
+        backoffUntil={backoffUntil}
+        lastUpdated={lastUpdated}
+        isStale={isStale}
+        dataSource={dataSource}
+        listWidth={listWidth}
+        detailWidth={detailWidth}
+        onListWidthChange={v => setListWidth(clamp(v, LIST_PANEL_MIN, LIST_PANEL_MAX))}
+        onDetailWidthChange={v => setDetailWidth(clamp(v, DETAIL_PANEL_MIN, DETAIL_PANEL_MAX))}
+      />
 
       {/* main-layout is position:relative so the detail overlay can be absolute */}
       <div className="main-layout">
@@ -68,7 +101,7 @@ export default function App() {
           flights={flights}
           selectedId={selectedId}
           onSelect={handleSelect}
-          theme={theme}
+          width={listWidth}
         />
 
         {/* Map always fills remaining space — NEVER resizes when panel opens */}
@@ -78,19 +111,20 @@ export default function App() {
             selectedFlight={selectedFlight}
             onSelect={handleSelect}
             track={track}
-            theme={theme}
           />
         </div>
 
         {/* Detail panel: absolute overlay, slides in/out via CSS — map never reflows */}
-        <div className={`detail-overlay${selectedFlight ? ' open' : ''}`}>
+        <div
+          className={`detail-overlay${selectedFlight ? ' open' : ''}`}
+          style={{ width: detailWidth }}
+        >
           {selectedFlight && (
             <FlightDetail
               key={selectedId}
               flight={selectedFlight}
               onClose={handleClose}
               onTrackLoad={setTrack}
-              theme={theme}
             />
           )}
         </div>
@@ -100,14 +134,14 @@ export default function App() {
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(3,3,12,0.92)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', gap: 26, zIndex: 9000,
+          justifyContent: 'center', gap: 16, zIndex: 9000,
           backdropFilter: 'blur(6px)',
         }}>
           <RadarLoader />
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--cyan)', letterSpacing: 5, marginTop: 4 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--cyan)', letterSpacing: 0.5, marginTop: 4 }}>
             ACQUIRING TRAFFIC
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 17, color: 'var(--text-dim)', letterSpacing: 1.5 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-dim)', letterSpacing: 0.2 }}>
             Connecting to OpenSky Network · KJFK
           </div>
         </div>
@@ -118,21 +152,21 @@ export default function App() {
 
 function RadarLoader() {
   return (
-    <div style={{ position: 'relative', width: 132, height: 132 }}>
+    <div style={{ position: 'relative', width: 96, height: 96 }}>
       <style>{`
         @keyframes radar-spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
       `}</style>
-      <svg width="132" height="132" viewBox="0 0 132 132">
-        {[26, 43, 59].map(r => (
-          <circle key={r} cx="66" cy="66" r={r} fill="none"
+      <svg width="96" height="96" viewBox="0 0 96 96">
+        {[18, 30, 42].map(r => (
+          <circle key={r} cx="48" cy="48" r={r} fill="none"
             stroke="rgba(0,195,255,0.15)" strokeWidth="1.5" />
         ))}
-        <line x1="66" y1="66" x2="66" y2="8" stroke="var(--cyan)" strokeWidth="2.5" opacity="0.8"
-          style={{ transformOrigin: '66px 66px', animation: 'radar-spin 2s linear infinite' }} />
-        <circle cx="66" cy="66" r="4" fill="var(--cyan)" />
+        <line x1="48" y1="48" x2="48" y2="8" stroke="var(--cyan)" strokeWidth="2.5" opacity="0.8"
+          style={{ transformOrigin: '48px 48px', animation: 'radar-spin 2s linear infinite' }} />
+        <circle cx="48" cy="48" r="3" fill="var(--cyan)" />
       </svg>
     </div>
   )
