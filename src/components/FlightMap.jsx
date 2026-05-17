@@ -1,14 +1,15 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { JFK, TWA_HOTEL, JFK_ONE_MILE_MAX_BOUNDS } from '../config/airspace'
 
-const TWA_HOTEL = [-73.7783, 40.6414]
+const TWA_HOTEL_LNGLAT = [TWA_HOTEL.lon, TWA_HOTEL.lat]
 
 // Initial camera: standing at TWA Hotel looking NW down runway 31L/13R approach path
 // Pitch 52° = strong perspective. Bearing 312° = NW up, runway center goes toward horizon.
 const INITIAL_VIEW = {
-  center: [-73.778, 40.638],
-  zoom: 14.2,
+  center: [JFK.lon, JFK.lat],
+  zoom: 14.9,
   pitch: 52,
   bearing: 312,
 }
@@ -118,6 +119,8 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       ...INITIAL_VIEW,
       attributionControl: false,
       maxPitch: 85,
+      maxBounds: JFK_ONE_MILE_MAX_BOUNDS,
+      minZoom: 14.5,
     })
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right')
@@ -238,7 +241,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         'cursor:default', 'pointer-events:none',
       ].join(';')
       new maplibregl.Marker({ element: hotelEl, anchor: 'center' })
-        .setLngLat(TWA_HOTEL)
+        .setLngLat(TWA_HOTEL_LNGLAT)
         .setPopup(new maplibregl.Popup({ closeButton: false, className: 'twa-popup' })
           .setText('TWA Hotel · KJFK'))
         .addTo(map)
@@ -350,7 +353,19 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       .setLngLat([selectedFlight.longitude, selectedFlight.latitude])
       .addTo(mapRef.current)
 
-    // Selection should not hijack camera; keep runway framing stable.
+    // Fly to selected if no track (track-fit handles the other case)
+    // Maintain at least zoom 8, but don't force closer than current view
+    if (!track) {
+      const currentZoom = mapRef.current.getZoom()
+      mapRef.current.flyTo({
+        center: [selectedFlight.longitude, selectedFlight.latitude],
+        zoom: Math.max(currentZoom, 14.5),
+        pitch: 52,
+        bearing: 312,
+        duration: 900,
+        essential: true,
+      })
+    }
   }, [selectedFlight?.icao24, mapReady])
 
   // Update pulse ring position as plane moves
@@ -386,6 +401,13 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }],
     })
 
+    const bounds = coords.reduce(
+      (b, c) => b.extend(c),
+      new maplibregl.LngLatBounds(coords[0], coords[0])
+    )
+    mapRef.current.fitBounds(bounds, {
+      padding: 80, maxZoom: 16, minZoom: 14.5, pitch: 30, bearing: 0, duration: 1200,
+    })
   }, [track, mapReady])
 
   const resetView = useCallback(() => {
