@@ -2,9 +2,19 @@ import { memo, useDeferredValue } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
-export default function NearbyList({ flights, selectedId, onSelect }) {
+export default function NearbyList({ flights, loading, error, rateLimitStatus, selectedId, onSelect }) {
   const deferredFlights = useDeferredValue(flights)
   const visible = deferredFlights.slice(0, 60)
+  const isInitialLoading = loading && flights.length === 0
+  const isBlocked = rateLimitStatus === 'blocked' && flights.length === 0
+  const emptyTitle = isInitialLoading ? 'Loading traffic...' : isBlocked ? 'Feed rate-limited' : error ? 'Feed unavailable' : 'No airborne traffic'
+  const emptyDetail = isInitialLoading
+    ? 'Connecting to OpenSky Network'
+    : isBlocked
+      ? 'Retrying after API cooldown'
+      : error
+        ? 'Retrying automatically'
+        : 'No aircraft currently reported near JFK'
 
   return (
     <div style={{
@@ -56,7 +66,12 @@ export default function NearbyList({ flights, selectedId, onSelect }) {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {visible.length === 0 && (
           <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 12, textAlign: 'center' }}>
-            Loading traffic...
+            <div style={{ color: error || isBlocked ? 'var(--amber)' : 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 1.8, textTransform: 'uppercase' }}>
+              {emptyTitle}
+            </div>
+            <div style={{ marginTop: 7, fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: 0.8, opacity: 0.75 }}>
+              {emptyDetail}
+            </div>
           </div>
         )}
         {visible.map(f => (
@@ -74,19 +89,24 @@ export default function NearbyList({ flights, selectedId, onSelect }) {
 
 const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   const airline = getAirlineName(flight.callsign)
-  const fn = parseFlightNumber(flight.callsign) || flight.icao24
-  const alt = flight.baro_altitude ? `${Math.round(metersToFeet(flight.baro_altitude) / 100)}` : '—'
-  const spd = flight.velocity ? msToKnots(flight.velocity) : '—'
+  const fn = parseFlightNumber(flight.callsign) || flight.callsign?.trim() || flight.icao24.toUpperCase()
+  const airlineLabel = airline ? airline.replace(' Airlines', '').replace(' Airways', '') : flight.origin_country || 'Unknown operator'
+  const alt = flight.baro_altitude != null ? `${Math.round(metersToFeet(flight.baro_altitude) / 100)}` : '—'
+  const spd = flight.velocity != null ? msToKnots(flight.velocity) : '—'
   const vr = flight.vertical_rate || 0
   const vrIndicator = vr > 1 ? '↑' : vr < -1 ? '↓' : '—'
   const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? '#e05a3a' : 'var(--text-dim)'
-  const distMi = Math.round(flight.distKm * 0.621)
+  const distMi = flight.distKm != null ? Math.round(flight.distKm * 0.621) : null
   // Distance-based accent: close = amber, mid = teal, far = dim
-  const accentColor = distMi <= 5 ? 'var(--amber)' : distMi <= 20 ? 'var(--cyan)' : 'rgba(255,255,255,0.1)'
+  const accentColor = distMi != null && distMi <= 5 ? 'var(--amber)' : distMi != null && distMi <= 20 ? 'var(--cyan)' : 'rgba(255,255,255,0.1)'
+  const distanceLabel = distMi != null ? `${distMi}mi` : 'range n/a'
 
   return (
     <button
       onClick={() => onSelect(flight.icao24)}
+      aria-pressed={selected}
+      aria-current={selected ? 'true' : undefined}
+      aria-label={`${selected ? 'Selected flight' : 'Select flight'} ${fn}, ${airlineLabel}, ${alt === '—' ? 'altitude unavailable' : `flight level ${alt}`}, ${spd === '—' ? 'speed unavailable' : `${spd} knots`}, ${distanceLabel}`}
       style={{
         width: '100%',
         background: selected ? 'rgba(0,212,200,0.07)' : 'transparent',
@@ -114,9 +134,9 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
           {fn}
         </div>
         <div style={{ fontSize: 9.5, color: 'var(--text-dim)', marginTop: 1, fontFamily: 'var(--font-ui)' }}>
-          {airline ? airline.replace(' Airlines', '').replace(' Airways', '') : flight.origin_country}
+          {airlineLabel}
           <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 4px' }}>·</span>
-          <span style={{ color: distMi <= 5 ? 'var(--amber)' : 'var(--text-dim)' }}>{distMi}mi</span>
+          <span style={{ color: distMi != null && distMi <= 5 ? 'var(--amber)' : 'var(--text-dim)' }}>{distanceLabel}</span>
         </div>
       </div>
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text)' }}>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { weatherCodeToCondition, estimateActiveRunways } from '../api/weather'
-import { headingToCardinal } from '../utils/geo'
+import { headingToCardinal, mphToKnots } from '../utils/geo'
 import ApiStatusIndicator from './ApiStatusIndicator'
 
 function Clock() {
@@ -23,18 +23,36 @@ function Clock() {
   )
 }
 
-export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil, lastUpdated, isStale }) {
+export default function HUDBar({
+  flights,
+  weather,
+  weatherError,
+  weatherLoading,
+  feedError,
+  feedLoading,
+  rateLimitStatus,
+  backoffUntil,
+  lastUpdated,
+  isStale,
+}) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
-  const windSpd = weather ? Math.round(weather.wind_speed_10m) : null
-  const windGust = weather ? Math.round(weather.wind_gusts_10m) : null
+  const windSpd = weather ? mphToKnots(weather.wind_speed_10m) : null
+  const windGust = weather ? mphToKnots(weather.wind_gusts_10m) : null
   const temp = weather ? Math.round(weather.temperature_2m) : null
   const cardinal = windDir !== null ? headingToCardinal(windDir) : '—'
   const runways = weather ? estimateActiveRunways(windDir) : []
   const airborne = flights.length
+  const feedBlocked = rateLimitStatus === 'blocked'
+  const feedUnavailable = Boolean(feedError && airborne === 0)
+  const feedDegraded = Boolean(feedError || isStale)
+  const feedLabel = feedBlocked ? 'BLOCKED' : feedUnavailable ? 'OFFLINE' : feedLoading && airborne === 0 ? 'SYNC' : feedDegraded ? 'STALE' : 'LIVE'
+  const feedColor = feedBlocked || feedUnavailable ? 'var(--red)' : feedDegraded ? 'var(--amber)' : feedLoading && airborne === 0 ? 'var(--cyan)' : 'var(--green)'
+  const weatherUnavailable = !weather && !weatherLoading
+  const weatherStale = Boolean(weather && weatherError)
 
   return (
-    <div style={{
+    <div className="hud-bar" style={{
       height: 52,
       background: 'rgba(3,3,14,0.97)',
       borderBottom: '1px solid rgba(0,212,200,0.2)',
@@ -71,15 +89,15 @@ export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginRight: 20 }}>
         <div style={{
           width: 7, height: 7, borderRadius: '50%',
-          background: rateLimitStatus === 'blocked' ? 'var(--red)' : 'var(--green)',
+          background: feedColor,
           animation: 'pulse-dot 1.4s ease-in-out infinite',
-          boxShadow: rateLimitStatus === 'blocked' ? '0 0 8px var(--red)' : '0 0 8px var(--green)',
+          boxShadow: `0 0 8px ${feedColor}`,
         }} />
         <span style={{
           fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: 1.5, fontWeight: 500,
-          color: rateLimitStatus === 'blocked' ? 'var(--red)' : 'var(--green)',
+          color: feedColor,
         }}>
-          LIVE
+          {feedLabel}
         </span>
       </div>
 
@@ -92,18 +110,25 @@ export default function HUDBar({ flights, weather, rateLimitStatus, backoffUntil
       />
 
       {/* Airborne count */}
-      <HUDStat label="AIRCRAFT" value={airborne || '—'} unit="" color="var(--cyan)" />
+      <HUDStat label="AIRCRAFT" value={feedLoading && airborne === 0 ? '—' : airborne} unit="" color="var(--cyan)" />
       <Divider />
 
       {/* Weather */}
       {weather && <>
-        <HUDStat label="WIND" value={`${cardinal} ${windSpd}`} unit="mph" />
-        {windGust > windSpd + 5 && <HUDStat label="GUST" value={windGust} unit="mph" color="var(--amber)" />}
+        <HUDStat label="WIND" value={`${cardinal} ${windSpd}`} unit="kt" />
+        {windGust > windSpd + 5 && <HUDStat label="GUST" value={windGust} unit="kt" color="var(--amber)" />}
         <HUDStat label="TEMP" value={`${temp}°`} unit="F" />
         <HUDStat label="SKY" value={condition} unit="" />
-        {runways.length > 0 && <HUDStat label="ACTIVE RWY" value={runways.join(' · ')} unit="" color="var(--amber)" />}
+        {runways.length > 0 && <HUDStat label="EST RWY" value={runways.join(' · ')} unit="" color="var(--amber)" />}
+        {weatherStale && <HUDStat label="WX" value="STALE" unit="" color="var(--amber)" />}
         <Divider />
       </>}
+      {!weather && (
+        <>
+          <HUDStat label="WX" value={weatherLoading ? 'LOADING' : weatherUnavailable ? 'UNAVAIL' : '—'} unit="" color={weatherUnavailable ? 'var(--amber)' : 'var(--text-dim)'} />
+          <Divider />
+        </>
+      )}
 
       {/* JFK location tag */}
       <div style={{ marginRight: 'auto', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1 }}>

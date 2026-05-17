@@ -187,6 +187,11 @@ body::before {
   pointer-events: all;
 }
 
+.detail-overlay > div {
+  height: 100%;
+  max-width: 100%;
+}
+
 /* MapLibre GL overrides */
 .maplibregl-map {
   font-family: var(--font-ui) !important;
@@ -210,3 +215,106 @@ body::before {
   border-top-color: rgba(0, 195, 255, 0.4) !important;
 }
 
+@media (max-width: 720px) {
+  .app,
+  .main-layout {
+    min-height: 0;
+  }
+
+  .hud-bar {
+    height: auto !important;
+    min-height: 52px;
+    max-height: 30vh;
+    padding: 8px 10px !important;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: center !important;
+    gap: 8px 10px !important;
+    overflow-y: auto;
+  }
+
+  .hud-bar > * {
+    min-width: 0;
+    margin-right: 0 !important;
+  }
+
+  .hud-bar > div[style*="width: 1px"] {
+    display: none !important;
+  }
+
+  .hud-bar > div:first-child {
+    flex: 1 1 148px;
+  }
+
+  .hud-bar > div:first-child img {
+    height: 24px;
+  }
+
+  .hud-bar > div:nth-last-child(2) {
+    order: 20;
+    flex: 1 1 100%;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+
+  .hud-bar > div:last-child {
+    order: 21;
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .main-layout {
+    flex-direction: column;
+  }
+
+  .main-layout > div:first-child {
+    width: 100% !important;
+    height: clamp(158px, 34vh, 250px);
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(0, 212, 200, 0.08);
+  }
+
+  .main-layout > div:nth-child(2) {
+    flex: 1 1 auto !important;
+    min-height: 220px;
+    width: 100%;
+  }
+
+  .detail-overlay {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .detail-overlay > div {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .hud-bar {
+    max-height: 26vh;
+    padding: 7px 8px !important;
+  }
+
+  .hud-bar > div:first-child {
+    flex-basis: 132px;
+  }
+
+  .hud-bar > div:first-child > div:last-child,
+  .hud-bar > div:nth-last-child(2) {
+    display: none !important;
+  }
+
+  .hud-bar > div:last-child {
+    flex-basis: auto;
+    order: 2;
+  }
+
+  .main-layout > div:first-child {
+    height: clamp(142px, 32vh, 210px);
+  }
+
+  .main-layout > div:nth-child(2) {
+    min-height: 200px;
+  }
+}

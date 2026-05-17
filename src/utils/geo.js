@@ -27,15 +27,24 @@ export function bearingDeg(lat1, lon1, lat2, lon2) {
 }
 
 export function metersToFeet(m) {
-  return Math.round((m || 0) * 3.28084)
+  if (m === null || m === undefined || m === '') return null
+  const value = Number(m)
+  if (!Number.isFinite(value)) return null
+  return Math.round(value * 3.28084)
 }
 
 export function msToKnots(ms) {
-  return Math.round((ms || 0) * 1.94384)
+  if (ms === null || ms === undefined || ms === '') return null
+  const value = Number(ms)
+  if (!Number.isFinite(value)) return null
+  return Math.round(value * 1.94384)
 }
 
 export function mphToKnots(mph) {
-  return Math.round((mph || 0) * 0.868976)
+  if (mph === null || mph === undefined || mph === '') return null
+  const value = Number(mph)
+  if (!Number.isFinite(value)) return null
+  return Math.round(value * 0.868976)
 }
 
 export function headingToCardinal(deg) {
@@ -46,5 +55,8 @@ export function headingToCardinal(deg) {
 
 // Vertical rate in m/s → fpm
 export function msTofpm(ms) {
-  return Math.round((ms || 0) * 196.85)
+  if (ms === null || ms === undefined || ms === '') return null
+  const value = Number(ms)
+  if (!Number.isFinite(value)) return null
+  return Math.round(value * 196.85)
 }

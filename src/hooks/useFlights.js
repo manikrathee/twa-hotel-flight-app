@@ -12,9 +12,9 @@ export default function useFlights() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
-  const [rateLimitStatus, setRateLimitStatus] = useState('ok') // 'ok' | 'blocked'
+  const [rateLimitStatus, setRateLimitStatus] = useState('ok') // 'ok' | 'blocked' | 'error'
   const [backoffUntil, setBackoffUntil] = useState(null)
-  const [isStale, setIsStale] = useState(false)
+  const [staleUpdatedAt, setStaleUpdatedAt] = useState(null)
 
   const timerRef = useRef(null)
   const mountedRef = useRef(true)
@@ -36,6 +36,8 @@ export default function useFlights() {
       const remaining = backoffRemainingMs()
       setRateLimitStatus('blocked')
       setBackoffUntil(Date.now() + remaining)
+      setError('OpenSky rate limit active')
+      setLoading(false)
       scheduleNext(Math.min(remaining + 1000, BASE_POLL_MS))
       return
     }
@@ -65,9 +67,12 @@ export default function useFlights() {
         const remaining = backoffRemainingMs()
         setRateLimitStatus('blocked')
         setBackoffUntil(Date.now() + remaining)
+        setError(e.message || 'OpenSky rate limit active')
         scheduleNext(Math.min(remaining + 1000, BASE_POLL_MS))
       } else {
         setError(e.message)
+        setRateLimitStatus('error')
+        setBackoffUntil(null)
         scheduleNext(BASE_POLL_MS)
       }
     } finally {
@@ -76,11 +81,13 @@ export default function useFlights() {
   }, [scheduleNext])
 
   // Keep loadRef current so the stable scheduleNext closure always calls the latest load
-  loadRef.current = load
+  useEffect(() => {
+    loadRef.current = load
+  }, [load])
 
   useEffect(() => {
     mountedRef.current = true
-    load()
+    const firstLoadId = setTimeout(load, 0)
 
     // Pause when tab hidden, refresh immediately on return
     const onVisibility = () => {
@@ -95,20 +102,22 @@ export default function useFlights() {
 
     return () => {
       mountedRef.current = false
+      clearTimeout(firstLoadId)
       clearTimeout(timerRef.current)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [load])
 
-  // Reactive isStale: fires a timer to flip the flag exactly at STALE_SHOW_MS
+  // Reactive stale marker: flips after STALE_SHOW_MS without synchronously setting state in the effect.
   useEffect(() => {
-    if (!lastUpdated) { setIsStale(false); return }
-    setIsStale(false)
+    if (!lastUpdated) return undefined
+    const updatedAt = lastUpdated.getTime()
     const ms = STALE_SHOW_MS - (Date.now() - lastUpdated.getTime())
-    if (ms <= 0) { setIsStale(true); return }
-    const id = setTimeout(() => setIsStale(true), ms)
+    const id = setTimeout(() => setStaleUpdatedAt(updatedAt), Math.max(0, ms))
     return () => clearTimeout(id)
   }, [lastUpdated])
+
+  const isStale = lastUpdated != null && staleUpdatedAt === lastUpdated.getTime()
 
   return { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale }
 }

@@ -24,21 +24,36 @@ export default function FlightPath({ track }) {
     </div>
   )
 
-  const startTime = points[0].time
-  const endTime = points[points.length - 1].time
+  const chartPoints = points
+    .map(p => ({ ...p, altFt: metersToFeet(p.altM) }))
+    .filter(p => p.altFt !== null)
+
+  if (!chartPoints.length) return (
+    <div style={{ color: 'var(--text-dim)', fontSize: 12, textAlign: 'center', padding: 12 }}>
+      No altitude data
+    </div>
+  )
+
+  const startTime = chartPoints[0].time
+  const endTime = chartPoints[chartPoints.length - 1].time
   const totalSec = endTime - startTime || 1
 
-  const altitudes = points.map(p => metersToFeet(p.altM || 0))
-  const maxAlt = Math.max(...altitudes, 1)
-  const minAlt = 0
+  const altitudes = chartPoints.map(p => p.altFt)
+  const rawMaxAlt = Math.max(...altitudes)
+  const rawMinAlt = Math.min(...altitudes)
+  const altRange = rawMaxAlt - rawMinAlt
+  const altPadding = Math.max(altRange * 0.15, 500)
+  const maxAlt = rawMaxAlt + altPadding
+  const minAlt = Math.max(0, rawMinAlt - altPadding)
+  const chartRange = maxAlt - minAlt || 1
 
   const W = 300
   const H = 70
 
   // Build SVG polyline points
-  const svgPoints = points.map((p, i) => {
+  const svgPoints = chartPoints.map((p, i) => {
     const x = ((p.time - startTime) / totalSec) * W
-    const y = H - ((altitudes[i] - minAlt) / (maxAlt - minAlt)) * H
+    const y = H - ((altitudes[i] - minAlt) / chartRange) * H
     return `${x},${y}`
   }).join(' ')
 
@@ -56,7 +71,7 @@ export default function FlightPath({ track }) {
     return h > 0 ? `${h}h ${m}m` : `${m}m`
   }
 
-  const hovered = hoverIdx !== null ? points[hoverIdx] : null
+  const hovered = hoverIdx !== null ? chartPoints[hoverIdx] : null
 
   return (
     <div>
@@ -73,13 +88,15 @@ export default function FlightPath({ track }) {
       <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden' }}>
         <svg
           width="100%"
+          role="img"
+          aria-label="Altitude history chart"
           viewBox={`0 0 ${W} ${H}`}
           style={{ display: 'block', cursor: 'crosshair' }}
           onMouseMove={e => {
             const rect = e.currentTarget.getBoundingClientRect()
             const ratio = (e.clientX - rect.left) / rect.width
-            const idx = Math.round(ratio * (points.length - 1))
-            setHoverIdx(Math.max(0, Math.min(points.length - 1, idx)))
+            const idx = Math.round(ratio * (chartPoints.length - 1))
+            setHoverIdx(Math.max(0, Math.min(chartPoints.length - 1, idx)))
           }}
           onMouseLeave={() => setHoverIdx(null)}
         >
@@ -108,10 +125,10 @@ export default function FlightPath({ track }) {
           />
 
           {/* Hover line */}
-          {hoverIdx !== null && (() => {
-            const p = points[hoverIdx]
+          {hoverIdx !== null && chartPoints[hoverIdx] && (() => {
+            const p = chartPoints[hoverIdx]
             const x = ((p.time - startTime) / totalSec) * W
-            const y = H - ((altitudes[hoverIdx] - minAlt) / (maxAlt - minAlt)) * H
+            const y = H - ((altitudes[hoverIdx] - minAlt) / chartRange) * H
             return (
               <g>
                 <line x1={x} y1="0" x2={x} y2={H} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
@@ -130,7 +147,7 @@ export default function FlightPath({ track }) {
         {hovered ? (
           <>
             <span style={{ color: 'var(--text-dim)' }}>{formatTime(hovered.time)}</span>
-            <span style={{ color: 'var(--cyan)' }}>{metersToFeet(hovered.altM || 0).toLocaleString()} ft</span>
+            <span style={{ color: 'var(--cyan)' }}>{hovered.altFt.toLocaleString()} ft</span>
             {hovered.heading != null && (
               <span style={{ color: 'var(--text-dim)' }}>HDG {Math.round(hovered.heading)}°</span>
             )}
@@ -138,7 +155,7 @@ export default function FlightPath({ track }) {
         ) : (
           <span style={{ color: 'var(--text-dim)' }}>
             {formatTime(startTime)} → {formatTime(endTime)}
-            {' · '}{Math.round(maxAlt / 100) * 100 >= 1000 ? `${Math.round(maxAlt / 1000)}k` : maxAlt} ft max
+            {' · '}{Math.round(rawMaxAlt / 100) * 100 >= 1000 ? `${Math.round(rawMaxAlt / 1000)}k` : rawMaxAlt.toLocaleString()} ft max
           </span>
         )}
       </div>

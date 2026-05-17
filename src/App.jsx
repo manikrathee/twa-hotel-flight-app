@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import HUDBar from './components/HUDBar'
 import FlightMap from './components/FlightMap'
 import NearbyList from './components/NearbyList'
@@ -10,9 +10,19 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [track, setTrack] = useState(null)
   const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale } = useFlights()
-  const { weather } = useWeather()
+  const { weather, error: weatherError, loading: weatherLoading } = useWeather()
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
+
+  useEffect(() => {
+    if (selectedId && !selectedFlight) {
+      const id = setTimeout(() => {
+        setSelectedId(null)
+        setTrack(null)
+      }, 0)
+      return () => clearTimeout(id)
+    }
+  }, [selectedId, selectedFlight])
 
   const handleSelect = useCallback((icao24) => {
     setSelectedId(prev => {
@@ -30,7 +40,18 @@ export default function App() {
   if (error && flights.length === 0) {
     return (
       <div className="app">
-        <HUDBar flights={[]} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} />
+        <HUDBar
+          flights={[]}
+          weather={weather}
+          weatherError={weatherError}
+          weatherLoading={weatherLoading}
+          feedError={error}
+          feedLoading={loading}
+          rateLimitStatus={rateLimitStatus}
+          backoffUntil={backoffUntil}
+          lastUpdated={lastUpdated}
+          isStale={isStale}
+        />
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 10,
@@ -58,12 +79,26 @@ export default function App() {
 
   return (
     <div className="app">
-      <HUDBar flights={flights} weather={weather} rateLimitStatus={rateLimitStatus} backoffUntil={backoffUntil} lastUpdated={lastUpdated} isStale={isStale} />
+      <HUDBar
+        flights={flights}
+        weather={weather}
+        weatherError={weatherError}
+        weatherLoading={weatherLoading}
+        feedError={error}
+        feedLoading={loading}
+        rateLimitStatus={rateLimitStatus}
+        backoffUntil={backoffUntil}
+        lastUpdated={lastUpdated}
+        isStale={isStale}
+      />
 
       {/* main-layout is position:relative so the detail overlay can be absolute */}
       <div className="main-layout">
         <NearbyList
           flights={flights}
+          loading={loading}
+          error={error}
+          rateLimitStatus={rateLimitStatus}
           selectedId={selectedId}
           onSelect={handleSelect}
         />

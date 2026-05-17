@@ -12,6 +12,15 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
   // Notify parent when track loads (for map path rendering)
   useEffect(() => { onTrackLoad?.(track) }, [onTrackLoad, track])
 
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose?.()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   const callsign = flight.callsign || flight.icao24
   const flightNum = parseFlightNumber(callsign)
   const airline = getAirlineName(callsign) || route?.airline?.name || flight.origin_country
@@ -27,15 +36,21 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
   const altFt = metersToFeet(flight.baro_altitude)
   const spdKt = msToKnots(flight.velocity)
   const vrFpm = msTofpm(flight.vertical_rate)
-  const hdg = Math.round(flight.heading || 0)
+  const headingValue = toFiniteTelemetryNumber(flight.heading)
+  const hdg = headingValue !== null ? Math.round(headingValue) : null
   const cardinal = headingToCardinal(hdg)
+  const distKm = toFiniteTelemetryNumber(flight.distKm)
+  const distMi = distKm !== null ? Math.round(distKm * 0.621) : null
 
   const origin = route?.origin
   const dest = route?.destination
   const routeMiles = routeDistanceMiles(origin, dest)
 
   return (
-    <div style={{
+    <div
+      role="complementary"
+      aria-label={`Flight detail for ${flightNum}`}
+      style={{
       width: 360,
       flexShrink: 0,
       background: 'rgba(5,5,18,0.98)',
@@ -68,6 +83,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         </div>
         <button
           onClick={onClose}
+          aria-label="Close flight detail"
           style={{
             background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
             color: 'var(--text-dim)', cursor: 'pointer', padding: '4px 10px',
@@ -94,7 +110,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           {photo ? (
             <img
               src={photo}
-              alt=""
+              alt={aircraftPhotoAlt(model, registration, airline)}
               style={{
                 width: 110,
                 height: 132,
@@ -197,21 +213,21 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <TelemetryCard
               label="ALTITUDE"
-              value={altFt.toLocaleString()}
+              value={altFt}
               unit="ft"
-              bar={Math.min(altFt / 45000, 1)}
+              bar={altFt !== null ? Math.min(altFt / 45000, 1) : null}
               color="var(--cyan)"
             />
             <TelemetryCard
               label="SPEED"
               value={spdKt}
               unit="kts"
-              bar={Math.min(spdKt / 600, 1)}
+              bar={spdKt !== null ? Math.min(spdKt / 600, 1) : null}
               color="var(--amber)"
             />
             <TelemetryCard
               label="V/RATE"
-              value={vrFpm > 0 ? `+${vrFpm.toLocaleString()}` : vrFpm.toLocaleString()}
+              value={formatSigned(vrFpm)}
               unit="fpm"
               color={vrFpm > 100 ? 'var(--green)' : vrFpm < -100 ? 'var(--red)' : 'var(--text-dim)'}
               noBar
@@ -220,14 +236,14 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <TelemetryCard
               label="HEADING"
-              value={`${hdg}° ${cardinal}`}
+              value={hdg !== null ? `${hdg}° ${cardinal}` : null}
               unit=""
               noBar
               color="var(--text)"
             />
             <TelemetryCard
               label="DIST FROM TWA"
-              value={Math.round(flight.distKm * 0.621)}
+              value={distMi}
               unit="mi"
               noBar
               color="var(--text)"
@@ -239,7 +255,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(0,212,200,0.07)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-display)', letterSpacing: 3 }}>ALTITUDE PROFILE</span>
-            <span style={{ fontSize: 11, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>{altFt.toLocaleString()} ft</span>
+            <span style={{ fontSize: 11, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>{formatTelemetryValue(altFt, 'ft')}</span>
           </div>
           <AltitudeBar altFt={altFt} vrFpm={vrFpm} />
         </div>
@@ -248,6 +264,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
         <div style={{ padding: '12px 16px' }}>
           <button
             onClick={() => setShowPath(v => !v)}
+            aria-expanded={showPath}
             style={{
               width: '100%',
               background: 'none',
@@ -300,6 +317,32 @@ function airlineCode(airline) {
   if (!airline) return '—'
   const code = airline.iata || airline.icao || '—'
   return airline.country_iso ? `${code} / ${airline.country_iso}` : code
+}
+
+function aircraftPhotoAlt(model, registration, airline) {
+  const parts = [airline, model, registration].filter(Boolean)
+  return parts.length ? `${parts.join(' ')} aircraft photo` : 'Aircraft photo'
+}
+
+function isUnknown(value) {
+  return value === null || value === undefined || value === ''
+}
+
+function toFiniteTelemetryNumber(value) {
+  if (isUnknown(value)) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function formatTelemetryValue(value, unit) {
+  if (isUnknown(value)) return 'Unknown'
+  const formatted = typeof value === 'number' ? value.toLocaleString() : value
+  return unit ? `${formatted} ${unit}` : formatted
+}
+
+function formatSigned(value) {
+  if (isUnknown(value)) return null
+  return value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString()
 }
 
 function DossierSection({ title, children }) {
@@ -380,6 +423,13 @@ function AirportBadge({ airport }) {
 }
 
 function TelemetryCard({ label, value, unit, bar, color, noBar }) {
+  const unknown = isUnknown(value)
+  const displayValue = unknown
+    ? 'Unknown'
+    : typeof value === 'number'
+    ? value.toLocaleString()
+    : value
+
   return (
     <div style={{
       background: 'rgba(255,255,255,0.025)',
@@ -391,10 +441,10 @@ function TelemetryCard({ label, value, unit, bar, color, noBar }) {
         {label}
       </div>
       <div style={{ fontSize: 17, fontFamily: 'var(--font-mono)', fontWeight: 400, color: color || 'var(--heading)', lineHeight: 1.1 }}>
-        {value}
-        {unit && <span style={{ fontSize: 9, color: 'var(--text-dim)', marginLeft: 3 }}>{unit}</span>}
+        {displayValue}
+        {unit && !unknown && <span style={{ fontSize: 9, color: 'var(--text-dim)', marginLeft: 3 }}>{unit}</span>}
       </div>
-      {!noBar && bar !== undefined && (
+      {!noBar && Number.isFinite(bar) && (
         <div style={{ marginTop: 6, height: 1.5, background: 'rgba(255,255,255,0.07)', borderRadius: 1 }}>
           <div style={{
             height: '100%', borderRadius: 1,
@@ -411,7 +461,8 @@ function TelemetryCard({ label, value, unit, bar, color, noBar }) {
 
 function AltitudeBar({ altFt, vrFpm }) {
   const levels = [0, 5000, 10000, 18000, 24000, 33000, 42000]
-  const pct = Math.min(altFt / 42000, 1)
+  const hasAltitude = Number.isFinite(altFt)
+  const pct = hasAltitude ? Math.min(altFt / 42000, 1) : 0
   const isClimbing = vrFpm > 100
   const isDescending = vrFpm < -100
 
@@ -459,8 +510,9 @@ function AltitudeBar({ altFt, vrFpm }) {
         ))}
       </div>
       <div style={{ marginTop: 4, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
-        {isClimbing ? '↑ CLIMBING' : isDescending ? '↓ DESCENDING' : '— LEVEL'}
-        {' '}FL{Math.round(altFt / 100)}
+        {hasAltitude
+          ? `${isClimbing ? '↑ CLIMBING' : isDescending ? '↓ DESCENDING' : '— LEVEL'} FL${Math.round(altFt / 100)}`
+          : 'Unknown altitude'}
       </div>
     </div>
   )

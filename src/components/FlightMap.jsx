@@ -168,6 +168,8 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       RUNWAY_LABELS.features.forEach(f => {
         const el = document.createElement('div')
         el.textContent = f.properties.label
+        el.setAttribute('aria-hidden', 'true')
+        el.tabIndex = -1
         el.style.cssText = [
           'color:rgba(255,255,255,0.5)',
           'font-family:var(--font-mono)',
@@ -230,6 +232,8 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
 
       // ── TWA Hotel marker ─────────────────────────────────────────────
       const hotelEl = document.createElement('div')
+      hotelEl.setAttribute('aria-hidden', 'true')
+      hotelEl.tabIndex = -1
       hotelEl.style.cssText = [
         'width:18px', 'height:18px', 'border-radius:50%',
         'border:2px solid #e31e26',
@@ -239,8 +243,6 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       ].join(';')
       new maplibregl.Marker({ element: hotelEl, anchor: 'center' })
         .setLngLat(TWA_HOTEL)
-        .setPopup(new maplibregl.Popup({ closeButton: false, className: 'twa-popup' })
-          .setText('TWA Hotel · KJFK'))
         .addTo(map)
 
       // ── Hover tooltip popup ──────────────────────────────────────────
@@ -282,7 +284,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       map.remove()
       mapRef.current = null
     }
-  }, [])
+  }, [onSelect])
 
   // Update plane positions — incremental updateData() after first load
   useEffect(() => {
@@ -341,11 +343,16 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     const el = document.createElement('div')
     el.style.cssText = [
       'width:44px', 'height:44px', 'border-radius:50%',
+      'pointer-events:none',
+    ].join(';')
+    const ring = document.createElement('div')
+    ring.style.cssText = [
+      'width:100%', 'height:100%', 'border-radius:50%',
       'border:2px solid rgba(0,195,255,0.6)',
       'background:rgba(0,195,255,0.06)',
       'animation:ring-expand 1.5s ease-out infinite',
-      'pointer-events:none',
     ].join(';')
+    el.appendChild(ring)
     pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat([selectedFlight.longitude, selectedFlight.latitude])
       .addTo(mapRef.current)
@@ -361,13 +368,13 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         essential: true,
       })
     }
-  }, [selectedFlight?.icao24, mapReady])
+  }, [mapReady, selectedFlight, track])
 
   // Update pulse ring position as plane moves
   useEffect(() => {
     if (!pulseMarkerRef.current || !selectedFlight) return
     pulseMarkerRef.current.setLngLat([selectedFlight.longitude, selectedFlight.latitude])
-  }, [selectedFlight?.longitude, selectedFlight?.latitude])
+  }, [selectedFlight])
 
   // Draw flight path
   useEffect(() => {
@@ -384,7 +391,10 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       .filter(p => p[1] != null && p[2] != null)
       .map(p => [p[2], p[1]])  // [lng, lat]
 
-    if (coords.length < 2) return
+    if (coords.length < 2) {
+      src.setData({ type: 'FeatureCollection', features: [] })
+      return
+    }
 
     src.setData({
       type: 'FeatureCollection',
@@ -396,9 +406,15 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       new maplibregl.LngLatBounds(coords[0], coords[0])
     )
     mapRef.current.fitBounds(bounds, {
-      padding: 80, maxZoom: 9, pitch: 30, bearing: 0, duration: 1200,
+      padding: selectedFlight
+        ? { top: 80, bottom: 80, left: 80, right: 440 }
+        : 80,
+      maxZoom: 9,
+      pitch: 30,
+      bearing: 0,
+      duration: 1200,
     })
-  }, [track, mapReady])
+  }, [mapReady, selectedFlight, track])
 
   const resetView = useCallback(() => {
     mapRef.current?.flyTo({ ...INITIAL_VIEW, duration: 900, essential: true })
@@ -445,7 +461,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         onClick={resetView}
         title="Reset to JFK runway view"
         style={{
-          position: 'absolute', bottom: 44, right: 12,
+          position: 'absolute', bottom: 44, right: selectedFlight ? 372 : 12,
           zIndex: 10,
           background: 'rgba(4,4,16,0.94)',
           border: '1px solid rgba(0,212,200,0.2)',
