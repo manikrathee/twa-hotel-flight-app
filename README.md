@@ -1,6 +1,9 @@
 # TWA Hotel Flight App
 
-Live JFK-area traffic display for the TWA Hotel.
+Live traffic display constrained to the immediate JFK/TWA airspace:
+- 1-mile radius around JFK for map + OpenSky state query.
+- Flights whose resolved route is to or from JFK.
+- Final display filtered to aircraft within visual range of the TWA Hotel.
 
 ## Screenshots
 

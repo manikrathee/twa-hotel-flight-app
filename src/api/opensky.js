@@ -1,12 +1,10 @@
 import { record429, recordSuccess } from './rateLimitManager'
 import { getAccessToken, invalidateToken } from './openskyAuth'
+import { JFK_ONE_MILE_BBOX } from '../config/airspace'
 
 const BASE = '/api/opensky'
 
-export const JFK = { lat: 40.6413, lon: -73.7781 }
-
-// Bounding box around JFK: roughly 60km radius
-const BBOX = { lamin: 40.35, lomin: -74.35, lamax: 40.95, lomax: -73.15 }
+const BBOX = JFK_ONE_MILE_BBOX
 
 function parseStates(states) {
   if (!Array.isArray(states)) return []
