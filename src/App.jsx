@@ -20,7 +20,7 @@ export default function App() {
   const [track, setTrack] = useState(null)
   const [listWidth, setListWidth] = useState(390)
   const [detailWidth, setDetailWidth] = useState(560)
-  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource } = useFlights()
+  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs } = useFlights(selectedId)
   const { weather } = useWeather()
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
@@ -125,6 +125,8 @@ export default function App() {
               flight={selectedFlight}
               onClose={handleClose}
               onTrackLoad={setTrack}
+              lastUpdated={lastUpdated}
+              refreshMs={pollMs}
             />
           )}
         </div>

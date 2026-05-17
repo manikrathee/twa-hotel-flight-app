@@ -350,19 +350,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       .setLngLat([selectedFlight.longitude, selectedFlight.latitude])
       .addTo(mapRef.current)
 
-    // Fly to selected if no track (track-fit handles the other case)
-    // Maintain at least zoom 8, but don't force closer than current view
-    if (!track) {
-      const currentZoom = mapRef.current.getZoom()
-      mapRef.current.flyTo({
-        center: [selectedFlight.longitude, selectedFlight.latitude],
-        zoom: Math.max(currentZoom, 8),
-        pitch: 52,
-        bearing: 312,
-        duration: 900,
-        essential: true,
-      })
-    }
+    // Selection should not hijack camera; keep runway framing stable.
   }, [selectedFlight?.icao24, mapReady])
 
   // Update pulse ring position as plane moves
@@ -398,13 +386,6 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }],
     })
 
-    const bounds = coords.reduce(
-      (b, c) => b.extend(c),
-      new maplibregl.LngLatBounds(coords[0], coords[0])
-    )
-    mapRef.current.fitBounds(bounds, {
-      padding: 80, maxZoom: 10, minZoom: 7, pitch: 30, bearing: 0, duration: 1200,
-    })
   }, [track, mapReady])
 
   const resetView = useCallback(() => {
