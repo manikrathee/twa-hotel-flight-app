@@ -4,8 +4,11 @@ import { isBlocked, backoffRemainingMs } from '../api/rateLimitManager'
 import { distanceKm } from '../utils/geo'
 import { flightCache } from '../cache/flightCache'
 
-const BASE_POLL_MS  = 15_000
-const STALE_SHOW_MS = 90_000  // show stale badge after 90s without a fresh update
+const BASE_POLL_MS          = 15_000
+const SELECTED_POLL_AUTH_MS = 5_000
+const SELECTED_POLL_ANON_MS = 10_000
+const STALE_SHOW_MS         = 90_000  // show stale badge after 90s without a fresh update
+const HAS_OPENSKY_AUTH      = Boolean(import.meta.env.VITE_OPENSKY_CLIENT_ID)
 
 function enrichFlights(raw) {
   return raw
@@ -14,7 +17,10 @@ function enrichFlights(raw) {
     .sort((a, b) => a.distKm - b.distKm)
 }
 
-export default function useFlights() {
+export default function useFlights(selectedIcao = null) {
+  const selectedPollMs = HAS_OPENSKY_AUTH ? SELECTED_POLL_AUTH_MS : SELECTED_POLL_ANON_MS
+  const pollMs = selectedIcao ? selectedPollMs : BASE_POLL_MS
+
   const [flights, setFlights]               = useState([])
   const [loading, setLoading]               = useState(true)
   const [error, setError]                   = useState(null)
@@ -40,7 +46,7 @@ export default function useFlights() {
       const remaining = backoffRemainingMs()
       setRateLimitStatus('blocked')
       setBackoffUntil(Date.now() + remaining)
-      scheduleNext(Math.min(remaining + 1000, BASE_POLL_MS))
+      scheduleNext(Math.min(remaining + 1000, pollMs))
       return
     }
 
@@ -55,7 +61,7 @@ export default function useFlights() {
       setBackoffUntil(null)
       setDataSource({ type: 'live' })
       flightCache.evict()
-      scheduleNext(BASE_POLL_MS)
+      scheduleNext(pollMs)
     } catch (e) {
       if (!mountedRef.current) return
 
@@ -65,10 +71,10 @@ export default function useFlights() {
         const remaining = backoffRemainingMs()
         setRateLimitStatus('blocked')
         setBackoffUntil(Date.now() + remaining)
-        scheduleNext(Math.min(remaining + 1000, BASE_POLL_MS))
+        scheduleNext(Math.min(remaining + 1000, pollMs))
       } else {
         setError(e.message)
-        scheduleNext(BASE_POLL_MS)
+        scheduleNext(pollMs)
       }
 
       // Fall back to DB cache on any failure (rate limit or network error)
@@ -85,7 +91,7 @@ export default function useFlights() {
     } finally {
       if (mountedRef.current) setLoading(false)
     }
-  }, [scheduleNext])
+  }, [pollMs, scheduleNext])
 
   loadRef.current = load
 
@@ -119,5 +125,5 @@ export default function useFlights() {
     return () => clearTimeout(id)
   }, [lastUpdated])
 
-  return { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource }
+  return { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs }
 }

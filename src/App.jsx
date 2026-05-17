@@ -11,7 +11,7 @@ export default function App() {
   const [track, setTrack] = useState(null)
   const [theme, setTheme] = useState('dark')
   const toggleTheme = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), [])
-  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource } = useFlights()
+  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs } = useFlights(selectedId)
   const { weather } = useWeather()
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
@@ -90,6 +90,8 @@ export default function App() {
               flight={selectedFlight}
               onClose={handleClose}
               onTrackLoad={setTrack}
+              lastUpdated={lastUpdated}
+              refreshMs={pollMs}
               theme={theme}
             />
           )}

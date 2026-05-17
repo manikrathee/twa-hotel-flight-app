@@ -5,7 +5,7 @@ import FlightPath from './FlightPath'
 import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
 import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
 
-export default function FlightDetail({ flight, onClose, onTrackLoad }) {
+export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated, refreshMs }) {
   const { track, route, aircraftInfo, loading } = useFlightDetail(flight)
   const [showPath, setShowPath] = useState(false)
 
@@ -56,6 +56,10 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
   const phase        = isClimbing ? 'CLIMBING' : isDescending ? 'DESCENDING' : 'LEVEL'
   const phaseColor   = isClimbing ? 'var(--green)' : isDescending ? 'var(--amber)' : 'var(--text-dim)'
   const phaseArrow   = isClimbing ? '↑' : isDescending ? '↓' : '—'
+  const refreshSec   = refreshMs ? Math.round(refreshMs / 1000) : null
+  const updatedLabel = lastUpdated
+    ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    : null
 
   return (
     <div style={{
@@ -106,6 +110,13 @@ export default function FlightDetail({ flight, onClose, onTrackLoad }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: phaseColor, letterSpacing: 1 }}>
             {phaseArrow} {phase}
           </div>
+          {(refreshSec || updatedLabel) && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', letterSpacing: 0.8 }}>
+              LIVE
+              {refreshSec ? ` · ${refreshSec}s refresh` : ''}
+              {updatedLabel ? ` · ${updatedLabel}` : ''}
+            </div>
+          )}
         </div>
       </div>
 
