@@ -14,13 +14,12 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
   if (status === 'ok' && !isStale) return null
 
   if (isStale && status === 'ok' && lastUpdated) {
-    const ageSec = Math.floor((Date.now() - Number(lastUpdated)) / 1000)
-    const ageLabel = ageSec < 120 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`
+    const staleTime = new Date(Number(lastUpdated)).toUTCString().slice(17, 25)
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>
         <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--amber)' }} />
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, color: 'var(--amber)', letterSpacing: 2 }}>
-          STALE {ageLabel}
+        <span style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>
+          STALE {staleTime}Z
         </span>
       </div>
     )
@@ -36,7 +35,7 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
         boxShadow: `0 0 6px ${color}`,
         animation: 'pulse-dot 1.2s ease-in-out infinite',
       }} />
-      <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, color, letterSpacing: 2 }}>
+      <span style={{ fontSize: 12, color, fontWeight: 600 }}>
         {label}
       </span>
     </div>

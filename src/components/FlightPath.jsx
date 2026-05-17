@@ -61,16 +61,22 @@ export default function FlightPath({ track }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'baseline' }}>
-        <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: 1.5 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>
           ALTITUDE HISTORY
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           {formatDuration(totalSec)} tracked
         </span>
       </div>
 
       {/* Altitude chart */}
-      <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+      <div style={{
+        position: 'relative',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        background: 'rgba(5,12,18,0.78)',
+      }}>
         <svg
           width="100%"
           viewBox={`0 0 ${W} ${H}`}
@@ -105,6 +111,11 @@ export default function FlightPath({ track }) {
             stroke="#00c3ff"
             strokeWidth="1.5"
             strokeLinejoin="round"
+            style={{
+              strokeDasharray: 560,
+              strokeDashoffset: 560,
+              animation: 'path-draw 0.8s ease forwards',
+            }}
           />
 
           {/* Hover line */}
@@ -125,12 +136,12 @@ export default function FlightPath({ track }) {
       {/* Hover tooltip */}
       <div style={{
         marginTop: 6, height: 28, display: 'flex', alignItems: 'center',
-        gap: 12, fontFamily: 'var(--font-mono)', fontSize: 10,
+        gap: 12, fontSize: 12,
       }}>
-        {hovered ? (
-          <>
+      {hovered ? (
+        <>
             <span style={{ color: 'var(--text-dim)' }}>{formatTime(hovered.time)}</span>
-            <span style={{ color: 'var(--cyan)' }}>{metersToFeet(hovered.altM || 0).toLocaleString()} ft</span>
+            <span style={{ color: 'var(--cyan)', fontWeight: 600 }}>{metersToFeet(hovered.altM || 0).toLocaleString()} ft</span>
             {hovered.heading != null && (
               <span style={{ color: 'var(--text-dim)' }}>HDG {Math.round(hovered.heading)}°</span>
             )}
@@ -149,8 +160,7 @@ export default function FlightPath({ track }) {
         display: 'flex',
         alignItems: 'center',
         gap: 4,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
+        fontSize: 12,
         color: 'var(--text-dim)',
       }}>
         <span style={{

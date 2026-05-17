@@ -35,6 +35,13 @@ Live traffic display constrained to the immediate JFK/TWA airspace:
 
 Supplemental aircraft values are intentionally approximate operating context, not dispatch data. Seat counts vary by airline cabin layout.
 
+## Selection Behavior
+
+- Selecting an aircraft keeps the map camera in the current view (no automatic flight-path zoom/fly-to).
+- While an aircraft is selected, live telemetry refreshes faster:
+  - Authenticated OpenSky client: every 5 seconds
+  - Anonymous mode: every 10 seconds
+
 ## Development
 
 ```sh

@@ -101,7 +101,7 @@ function createPlaneImageData() {
   return ctx.getImageData(0, 0, S, S)
 }
 
-export default function FlightMap({ flights, selectedFlight, onSelect, track, theme }) {
+export default function FlightMap({ flights, selectedFlight, onSelect, track }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
@@ -173,10 +173,10 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
         el.textContent = f.properties.label
         el.style.cssText = [
           'color:rgba(255,255,255,0.5)',
-          'font-family:var(--font-mono)',
-          'font-size:10px',
+          'font-family:var(--font-ui)',
+          'font-size:11px',
           'font-weight:600',
-          'letter-spacing:1px',
+          'letter-spacing:0.3px',
           'pointer-events:none',
           'text-shadow:0 0 4px rgba(0,0,0,0.8)',
           'white-space:nowrap',
@@ -341,12 +341,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
     pulseMarkerRef.current = null
     if (!mapReady || !mapRef.current || !selectedFlight) return
 
-    const el = document.createElement('div')
-    el.style.cssText = [
-      'width:44px', 'height:44px', 'border-radius:50%',
+      const el = document.createElement('div')
+      el.style.cssText = [
+      'width:36px', 'height:36px', 'border-radius:50%',
       'border:2px solid rgba(0,195,255,0.6)',
       'background:rgba(0,195,255,0.06)',
-      'animation:ring-expand 1.5s ease-out infinite',
+      'animation:ring-expand 1.2s ease-out infinite',
       'pointer-events:none',
     ].join(';')
     pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
@@ -420,31 +420,33 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
         .maplibregl-ctrl-group {
           background: rgba(4,4,16,0.94) !important;
           border: 1px solid rgba(0,212,200,0.2) !important;
-          border-radius: 5px !important;
+          border-radius: 10px !important;
           box-shadow: 0 2px 12px rgba(0,0,0,0.5) !important;
         }
         .maplibregl-ctrl-group button {
           background: transparent !important;
           color: rgba(0,212,200,0.7) !important;
           border-bottom-color: rgba(0,212,200,0.1) !important;
+          width: 32px !important;
+          height: 32px !important;
         }
         .maplibregl-ctrl-group button:hover { background: rgba(0,212,200,0.08) !important; color: rgba(0,212,200,1) !important; }
         .maplibregl-ctrl-compass .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(160deg) brightness(0.75); }
         .maplibregl-ctrl-attrib {
           background: rgba(3,3,12,0.9) !important;
           color: rgba(84,96,112,0.8) !important;
-          font-size: 9px !important;
-          font-family: 'DM Mono', monospace !important;
+          font-size: 11px !important;
+          font-family: 'Inter', sans-serif !important;
         }
         .maplibregl-ctrl-attrib a { color: rgba(0,212,200,0.45) !important; }
         .twa-popup .maplibregl-popup-content {
           background: rgba(4,4,16,0.94) !important;
           border: 1px solid rgba(0,212,200,0.25) !important;
           color: rgba(0,212,200,0.9) !important;
-          font-family: 'DM Mono', monospace !important;
-          font-size: 11px !important;
+          font-family: 'Inter', sans-serif !important;
+          font-size: 12px !important;
           padding: 5px 10px !important;
-          border-radius: 4px !important;
+          border-radius: 8px !important;
         }
       `}</style>
 
@@ -457,12 +459,13 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
           zIndex: 10,
           background: 'rgba(0,195,255,0.1)',
           border: '1px solid rgba(0,195,255,0.35)',
-          borderRadius: 5,
-          padding: '5px 16px',
+          borderRadius: 999,
+          padding: '6px 14px',
           backdropFilter: 'blur(12px)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 2px 16px rgba(0,195,255,0.12)',
           pointerEvents: 'none',
+          animation: 'fade-in 0.3s ease',
         }}>
           <div style={{
             width: 7, height: 7, borderRadius: '50%',
@@ -470,10 +473,10 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
             boxShadow: '0 0 6px var(--cyan)',
             animation: 'pulse-dot 1.4s ease-in-out infinite',
           }} />
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--cyan)', letterSpacing: 2.5 }}>
+          <span style={{ fontSize: 12, color: 'var(--cyan)', fontWeight: 700, letterSpacing: 0.2 }}>
             VIEWING FLIGHT PATH
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(0,195,255,0.55)', letterSpacing: 1 }}>
+          <span style={{ fontSize: 12, color: 'rgba(0,195,255,0.7)', fontWeight: 500 }}>
             {(selectedFlight.callsign || selectedFlight.icao24).trim()} · LAST 90 MIN
           </span>
         </div>
@@ -488,12 +491,11 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
           zIndex: 10,
           background: 'rgba(4,4,16,0.94)',
           border: '1px solid rgba(0,212,200,0.2)',
-          borderRadius: 5,
+          borderRadius: 10,
           color: 'rgba(0,212,200,0.7)',
-          fontFamily: 'var(--font-display)',
-          fontSize: 11,
-          letterSpacing: 2,
-          padding: '5px 11px',
+          fontSize: 12,
+          fontWeight: 600,
+          padding: '6px 10px',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
           boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
@@ -510,7 +512,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track, th
         position: 'absolute', bottom: 44, left: 12, zIndex: 10,
         background: 'rgba(3,3,12,0.92)',
         border: '1px solid rgba(0,212,200,0.1)',
-        borderRadius: 5,
+        borderRadius: 10,
         padding: '6px 10px',
         backdropFilter: 'blur(10px)',
         display: 'flex', flexDirection: 'column', gap: 5,
@@ -529,7 +531,7 @@ function Row({ color, label, line, dot }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
       {line && <div style={{ width: 16, height: 1.5, background: color, borderRadius: 1, opacity: 0.9 }} />}
       {dot && <div style={{ width: 8, height: 8, borderRadius: '50%', border: `1.5px solid ${color}`, background: `${color}22` }} />}
-      <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', letterSpacing: 2, color: 'rgba(84,96,112,0.9)' }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(84,96,112,0.9)' }}>{label}</span>
     </div>
   )
 }
