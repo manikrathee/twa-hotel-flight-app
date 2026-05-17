@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import Database from 'better-sqlite3'
+import { JFK, JFK_ONE_MILE_BBOX } from '../src/config/airspace.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT       = join(__dirname, '..')
@@ -21,8 +22,7 @@ const ENV_PATH   = join(ROOT, '.env.local')
 
 mkdirSync(join(ROOT, 'data'), { recursive: true })
 
-const JFK  = { lat: 40.6413, lon: -73.7781 }
-const BBOX = { lamin: 40.35, lomin: -74.35, lamax: 40.95, lomax: -73.15 }
+const BBOX = JFK_ONE_MILE_BBOX
 const TOKEN_URL  = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
 const STATES_URL = `https://opensky-network.org/api/states/all?lamin=${BBOX.lamin}&lomin=${BBOX.lomin}&lamax=${BBOX.lamax}&lomax=${BBOX.lomax}`
 
