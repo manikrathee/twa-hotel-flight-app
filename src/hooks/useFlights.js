@@ -11,6 +11,7 @@ const SELECTED_POLL_AUTH_MS = 5_000
 const SELECTED_POLL_ANON_MS = 10_000
 const STALE_SHOW_MS         = 90_000  // show stale badge after 90s without a fresh update
 const HAS_OPENSKY_AUTH      = Boolean(import.meta.env.VITE_OPENSKY_CLIENT_ID)
+const ROUTE_TTL_MS          = 20 * 60 * 1000
 
 const routeCache = new Map()
 const inFlightRouteLookup = new Map()
@@ -140,6 +141,7 @@ export default function useFlights(selectedIcao = null) {
       setBackoffUntil(null)
       setDataSource({ type: 'live' })
       flightCache.evict()
+      evictRouteCache()
       scheduleNext(pollMs)
     } catch (e) {
       if (!mountedRef.current) return
