@@ -49,9 +49,18 @@ npm install
 npm run dev
 ```
 
+### OpenSky Auth Configuration
+
+- Browser never sends `client_secret` directly.
+- Vite dev server exchanges credentials at `/api/opensky-auth` using server-side env values.
+- Supported env names: `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET`.
+- Backward-compatible aliases also supported: `VITE_OPENSKY_CLIENT_ID` / `VITE_OPENSKY_CLIENT_SECRET`.
+- If credentials are missing, app falls back to anonymous OpenSky requests.
+
 ## Gate
 
 ```sh
 npm run lint
+npm run test
 npm run build
 ```

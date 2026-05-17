@@ -8,8 +8,16 @@ import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } fr
 export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated, refreshMs }) {
   const { track, route, aircraftInfo, loading } = useFlightDetail(flight)
   const [showPath, setShowPath] = useState(false)
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
 
   useEffect(() => { onTrackLoad?.(track) }, [onTrackLoad, track])
+  useEffect(() => {
+    if (!flight.last_contact) return
+    const update = () => setNowSec(Math.floor(Date.now() / 1000))
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [flight.last_contact])
 
   const callsign = flight.callsign || flight.icao24
   const flightNum = parseFlightNumber(callsign)

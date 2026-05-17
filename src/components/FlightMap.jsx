@@ -1,105 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { JFK, TWA_HOTEL, JFK_ONE_MILE_MAX_BOUNDS } from '../config/airspace'
-
-const TWA_HOTEL_LNGLAT = [TWA_HOTEL.lon, TWA_HOTEL.lat]
-
-// Initial camera: standing at TWA Hotel looking NW down runway 31L/13R approach path
-// Pitch 52° = strong perspective. Bearing 312° = NW up, runway center goes toward horizon.
-const INITIAL_VIEW = {
-  center: [JFK.lon, JFK.lat],
-  zoom: 14.9,
-  pitch: 52,
-  bearing: 312,
-}
-
-// CartoDB dark raster + our vector layers (no API key needed)
-const MAP_STYLE = {
-  version: 8,
-  sources: {
-    'carto': {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-      ],
-      tileSize: 256,
-      maxzoom: 20,
-    },
-  },
-  layers: [{ id: 'carto-raster', type: 'raster', source: 'carto' }],
-  glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-}
-
-// JFK runway centerlines (FAA-approximate coordinates)
-const JFK_RUNWAYS = {
-  type: 'FeatureCollection',
-  features: [
-    {
-      type: 'Feature',
-      properties: { id: '04L/22R', width: 150 },
-      geometry: { type: 'LineString', coordinates: [[-73.7895, 40.6173], [-73.7648, 40.6652]] },
-    },
-    {
-      type: 'Feature',
-      properties: { id: '04R/22L', width: 150 },
-      geometry: { type: 'LineString', coordinates: [[-73.7841, 40.6169], [-73.7594, 40.6648]] },
-    },
-    {
-      type: 'Feature',
-      properties: { id: '13L/31R', width: 200 },
-      geometry: { type: 'LineString', coordinates: [[-73.7973, 40.6556], [-73.7469, 40.6260]] },
-    },
-    {
-      type: 'Feature',
-      properties: { id: '13R/31L', width: 200 },
-      geometry: { type: 'LineString', coordinates: [[-73.8016, 40.6511], [-73.7592, 40.6225]] },
-    },
-  ],
-}
-
-// Runway labels (threshold positions for text placement)
-const RUNWAY_LABELS = {
-  type: 'FeatureCollection',
-  features: [
-    { type: 'Feature', properties: { label: '13R' }, geometry: { type: 'Point', coordinates: [-73.7592, 40.6225] } },
-    { type: 'Feature', properties: { label: '31L' }, geometry: { type: 'Point', coordinates: [-73.8016, 40.6511] } },
-    { type: 'Feature', properties: { label: '13L' }, geometry: { type: 'Point', coordinates: [-73.7469, 40.6260] } },
-    { type: 'Feature', properties: { label: '31R' }, geometry: { type: 'Point', coordinates: [-73.7973, 40.6556] } },
-    { type: 'Feature', properties: { label: '04L' }, geometry: { type: 'Point', coordinates: [-73.7895, 40.6173] } },
-    { type: 'Feature', properties: { label: '22R' }, geometry: { type: 'Point', coordinates: [-73.7648, 40.6652] } },
-    { type: 'Feature', properties: { label: '04R' }, geometry: { type: 'Point', coordinates: [-73.7841, 40.6169] } },
-    { type: 'Feature', properties: { label: '22L' }, geometry: { type: 'Point', coordinates: [-73.7594, 40.6648] } },
-  ],
-}
-
-// Draw plane icon to canvas ImageData — synchronous, no SVG/fetch needed
-function createPlaneImageData() {
-  const S = 32
-  const canvas = document.createElement('canvas')
-  canvas.width = S
-  canvas.height = S
-  const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, S, S)
-  ctx.fillStyle = 'white'
-  ctx.beginPath()
-  // Plane pointing UP (north), classic silhouette
-  ctx.moveTo(16, 1)    // nose
-  ctx.lineTo(20, 13)   // right wing root leading
-  ctx.lineTo(31, 16)   // right wingtip
-  ctx.lineTo(20, 18)   // right wing root trailing
-  ctx.lineTo(18.5, 30) // right tail
-  ctx.lineTo(16, 27)   // tail notch
-  ctx.lineTo(13.5, 30) // left tail
-  ctx.lineTo(12, 18)   // left wing root trailing
-  ctx.lineTo(1, 16)    // left wingtip
-  ctx.lineTo(12, 13)   // left wing root leading
-  ctx.closePath()
-  ctx.fill()
-  return ctx.getImageData(0, 0, S, S)
-}
+import { INITIAL_VIEW, JFK_RUNWAYS, MAP_STYLE, RUNWAY_LABELS, TWA_HOTEL } from './flightMapConfig'
+import { buildPlaneFeatures, buildPlaneSourceDiff, createPlaneImageData, getTrackCoordinates } from './flightMapHelpers'
 
 export default function FlightMap({ flights, selectedFlight, onSelect, track }) {
   const containerRef = useRef(null)
@@ -107,7 +10,15 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
   const prevIcaoSetRef = useRef(null)
+  const onSelectRef = useRef(onSelect)
+  const selectedFlightRef = useRef(selectedFlight)
   const [mapReady, setMapReady] = useState(false)
+  const selectedIcao = selectedFlight?.icao24 ?? null
+  const selectedLng = selectedFlight?.longitude
+  const selectedLat = selectedFlight?.latitude
+
+  useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
+  useEffect(() => { selectedFlightRef.current = selectedFlight }, [selectedFlight])
 
   // Init map once
   useEffect(() => {
@@ -119,8 +30,6 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       ...INITIAL_VIEW,
       attributionControl: false,
       maxPitch: 85,
-      maxBounds: JFK_ONE_MILE_MAX_BOUNDS,
-      minZoom: 14.5,
     })
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'top-right')
@@ -173,10 +82,10 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         el.textContent = f.properties.label
         el.style.cssText = [
           'color:rgba(255,255,255,0.5)',
-          'font-family:var(--font-ui)',
-          'font-size:11px',
+          'font-family:var(--font-mono)',
+          'font-size:10px',
           'font-weight:600',
-          'letter-spacing:0.3px',
+          'letter-spacing:1px',
           'pointer-events:none',
           'text-shadow:0 0 4px rgba(0,0,0,0.8)',
           'white-space:nowrap',
@@ -241,7 +150,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         'cursor:default', 'pointer-events:none',
       ].join(';')
       new maplibregl.Marker({ element: hotelEl, anchor: 'center' })
-        .setLngLat(TWA_HOTEL_LNGLAT)
+        .setLngLat(TWA_HOTEL)
         .setPopup(new maplibregl.Popup({ closeButton: false, className: 'twa-popup' })
           .setText('TWA Hotel · KJFK'))
         .addTo(map)
@@ -272,7 +181,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       // ── Click to select ──────────────────────────────────────────────
       map.on('click', 'planes-layer', e => {
         const icao24 = e.features[0]?.properties?.icao24
-        if (icao24) onSelect(icao24)
+        if (icao24) onSelectRef.current?.(icao24)
       })
 
       isLoadedRef.current = true
@@ -296,18 +205,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     const src = mapRef.current.getSource('planes')
     if (!src) return
 
-    const features = flights
-      .filter(f => f.icao24 != null && f.latitude != null && f.longitude != null)
-      .map(f => ({
-        type: 'Feature',
-        properties: {
-          icao24: f.icao24,
-          callsign: (f.callsign || f.icao24).trim(),
-          heading: f.heading || 0,
-          selected: f.icao24 === selectedFlight?.icao24,
-        },
-        geometry: { type: 'Point', coordinates: [f.longitude, f.latitude] },
-      }))
+    const features = buildPlaneFeatures(flights, selectedIcao)
 
     if (prevIcaoSetRef.current === null) {
       src.setData({ type: 'FeatureCollection', features })
@@ -316,41 +214,33 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     }
 
     const prevSet = prevIcaoSetRef.current
-    const nextMap = new Map(features.map(f => [f.properties.icao24, f]))
-    const add = features.filter(f => !prevSet.has(f.properties.icao24))
-    // updateData requires GeoJSONFeatureDiff format: { id, newGeometry, addOrUpdateProperties }
-    const update = features
-      .filter(f => prevSet.has(f.properties.icao24))
-      .map(f => ({
-        id: f.properties.icao24,
-        newGeometry: f.geometry,
-        addOrUpdateProperties: Object.entries(f.properties).map(([key, value]) => ({ key, value })),
-      }))
-    const remove = [...prevSet].filter(id => !nextMap.has(id))
+    const { add, update, remove, nextSet } = buildPlaneSourceDiff(features, prevSet)
 
     if (add.length || update.length || remove.length) {
       src.updateData({ add, update, remove })
     }
 
-    prevIcaoSetRef.current = new Set(nextMap.keys())
-  }, [flights, selectedFlight?.icao24, mapReady])
+    prevIcaoSetRef.current = nextSet
+  }, [flights, selectedIcao, mapReady])
 
   // Pulse ring on selected plane (single DOM marker)
   useEffect(() => {
     pulseMarkerRef.current?.remove()
     pulseMarkerRef.current = null
-    if (!mapReady || !mapRef.current || !selectedFlight) return
+    const selected = selectedFlightRef.current
+    if (!mapReady || !mapRef.current || !selected) return
+    if (selected.longitude == null || selected.latitude == null) return
 
-      const el = document.createElement('div')
-      el.style.cssText = [
-      'width:36px', 'height:36px', 'border-radius:50%',
+    const el = document.createElement('div')
+    el.style.cssText = [
+      'width:44px', 'height:44px', 'border-radius:50%',
       'border:2px solid rgba(0,195,255,0.6)',
       'background:rgba(0,195,255,0.06)',
-      'animation:ring-expand 1.2s ease-out infinite',
+      'animation:ring-expand 1.5s ease-out infinite',
       'pointer-events:none',
     ].join(';')
     pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([selectedFlight.longitude, selectedFlight.latitude])
+      .setLngLat([selected.longitude, selected.latitude])
       .addTo(mapRef.current)
 
     // Selection should not hijack camera; keep runway framing stable.
@@ -358,9 +248,9 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
 
   // Update pulse ring position as plane moves
   useEffect(() => {
-    if (!pulseMarkerRef.current || !selectedFlight) return
-    pulseMarkerRef.current.setLngLat([selectedFlight.longitude, selectedFlight.latitude])
-  }, [selectedFlight?.longitude, selectedFlight?.latitude])
+    if (!pulseMarkerRef.current || selectedLng == null || selectedLat == null) return
+    pulseMarkerRef.current.setLngLat([selectedLng, selectedLat])
+  }, [selectedIcao, selectedLng, selectedLat])
 
   // Draw flight path
   useEffect(() => {
@@ -375,14 +265,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
 
     // Trim to last 90 minutes so a cross-country flight doesn't zoom out to the whole US
     const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 60
-    const recentPath = track.path.filter(p => p[0] >= cutoffSec)
-    const pathToUse = recentPath.length >= 2 ? recentPath : track.path
+    const coords = getTrackCoordinates(track, cutoffSec)
 
-    const coords = pathToUse
-      .filter(p => p[1] != null && p[2] != null)
-      .map(p => [p[2], p[1]])  // [lng, lat]
-
-    if (coords.length < 2) return
+    if (coords.length < 2) {
+      src.setData({ type: 'FeatureCollection', features: [] })
+      return
+    }
 
     src.setData({
       type: 'FeatureCollection',
@@ -401,33 +289,31 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         .maplibregl-ctrl-group {
           background: rgba(4,4,16,0.94) !important;
           border: 1px solid rgba(0,212,200,0.2) !important;
-          border-radius: 10px !important;
+          border-radius: 5px !important;
           box-shadow: 0 2px 12px rgba(0,0,0,0.5) !important;
         }
         .maplibregl-ctrl-group button {
           background: transparent !important;
           color: rgba(0,212,200,0.7) !important;
           border-bottom-color: rgba(0,212,200,0.1) !important;
-          width: 32px !important;
-          height: 32px !important;
         }
         .maplibregl-ctrl-group button:hover { background: rgba(0,212,200,0.08) !important; color: rgba(0,212,200,1) !important; }
         .maplibregl-ctrl-compass .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(160deg) brightness(0.75); }
         .maplibregl-ctrl-attrib {
           background: rgba(3,3,12,0.9) !important;
           color: rgba(84,96,112,0.8) !important;
-          font-size: 11px !important;
-          font-family: 'Inter', sans-serif !important;
+          font-size: 9px !important;
+          font-family: 'DM Mono', monospace !important;
         }
         .maplibregl-ctrl-attrib a { color: rgba(0,212,200,0.45) !important; }
         .twa-popup .maplibregl-popup-content {
           background: rgba(4,4,16,0.94) !important;
           border: 1px solid rgba(0,212,200,0.25) !important;
           color: rgba(0,212,200,0.9) !important;
-          font-family: 'Inter', sans-serif !important;
-          font-size: 12px !important;
+          font-family: 'DM Mono', monospace !important;
+          font-size: 11px !important;
           padding: 5px 10px !important;
-          border-radius: 8px !important;
+          border-radius: 4px !important;
         }
       `}</style>
 
@@ -440,13 +326,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
           zIndex: 10,
           background: 'rgba(0,195,255,0.1)',
           border: '1px solid rgba(0,195,255,0.35)',
-          borderRadius: 999,
-          padding: '6px 14px',
+          borderRadius: 5,
+          padding: '5px 16px',
           backdropFilter: 'blur(12px)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 2px 16px rgba(0,195,255,0.12)',
           pointerEvents: 'none',
-          animation: 'fade-in 0.3s ease',
         }}>
           <div style={{
             width: 7, height: 7, borderRadius: '50%',
@@ -454,10 +339,10 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
             boxShadow: '0 0 6px var(--cyan)',
             animation: 'pulse-dot 1.4s ease-in-out infinite',
           }} />
-          <span style={{ fontSize: 12, color: 'var(--cyan)', fontWeight: 700, letterSpacing: 0.2 }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--cyan)', letterSpacing: 2.5 }}>
             VIEWING FLIGHT PATH
           </span>
-          <span style={{ fontSize: 12, color: 'rgba(0,195,255,0.7)', fontWeight: 500 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(0,195,255,0.55)', letterSpacing: 1 }}>
             {(selectedFlight.callsign || selectedFlight.icao24).trim()} · LAST 90 MIN
           </span>
         </div>
@@ -472,11 +357,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
           zIndex: 10,
           background: 'rgba(4,4,16,0.94)',
           border: '1px solid rgba(0,212,200,0.2)',
-          borderRadius: 10,
+          borderRadius: 5,
           color: 'rgba(0,212,200,0.7)',
-          fontSize: 12,
-          fontWeight: 600,
-          padding: '6px 10px',
+          fontFamily: 'var(--font-display)',
+          fontSize: 11,
+          letterSpacing: 2,
+          padding: '5px 11px',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
           boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
@@ -493,7 +379,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         position: 'absolute', bottom: 44, left: 12, zIndex: 10,
         background: 'rgba(3,3,12,0.92)',
         border: '1px solid rgba(0,212,200,0.1)',
-        borderRadius: 10,
+        borderRadius: 5,
         padding: '6px 10px',
         backdropFilter: 'blur(10px)',
         display: 'flex', flexDirection: 'column', gap: 5,
@@ -512,7 +398,7 @@ function Row({ color, label, line, dot }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
       {line && <div style={{ width: 16, height: 1.5, background: color, borderRadius: 1, opacity: 0.9 }} />}
       {dot && <div style={{ width: 8, height: 8, borderRadius: '50%', border: `1.5px solid ${color}`, background: `${color}22` }} />}
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(84,96,112,0.9)' }}>{label}</span>
+      <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', letterSpacing: 2, color: 'rgba(84,96,112,0.9)' }}>{label}</span>
     </div>
   )
 }

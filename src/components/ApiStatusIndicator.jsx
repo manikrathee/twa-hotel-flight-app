@@ -2,24 +2,38 @@ import { useState, useEffect } from 'react'
 
 export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, isStale }) {
   const [remaining, setRemaining] = useState(0)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
     if (status !== 'blocked' || !backoffUntil) return
-    const update = () => setRemaining(Math.max(0, Math.ceil((backoffUntil - Date.now()) / 1000)))
+    const update = () => {
+      const now = Date.now()
+      setNowMs(now)
+      setRemaining(Math.max(0, Math.ceil((backoffUntil - now) / 1000)))
+    }
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
   }, [status, backoffUntil])
 
+  useEffect(() => {
+    if (!(isStale && status === 'ok' && lastUpdated)) return
+    const update = () => setNowMs(Date.now())
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [isStale, status, lastUpdated])
+
   if (status === 'ok' && !isStale) return null
 
   if (isStale && status === 'ok' && lastUpdated) {
-    const staleTime = new Date(Number(lastUpdated)).toUTCString().slice(17, 25)
+    const ageSec = Math.max(0, Math.floor((nowMs - Number(lastUpdated)) / 1000))
+    const ageLabel = ageSec < 120 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>
         <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--amber)' }} />
-        <span style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>
-          STALE {staleTime}Z
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, color: 'var(--amber)', letterSpacing: 2 }}>
+          STALE {ageLabel}
         </span>
       </div>
     )
@@ -35,7 +49,7 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
         boxShadow: `0 0 6px ${color}`,
         animation: 'pulse-dot 1.2s ease-in-out infinite',
       }} />
-      <span style={{ fontSize: 12, color, fontWeight: 600 }}>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, color, letterSpacing: 2 }}>
         {label}
       </span>
     </div>

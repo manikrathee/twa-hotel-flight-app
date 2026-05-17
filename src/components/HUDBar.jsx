@@ -33,16 +33,20 @@ function Clock() {
 }
 
 function DataSourceBadge({ dataSource }) {
+  const cachedAtMs = dataSource?.cachedAt ? dataSource.cachedAt.getTime() : null
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!cachedAtMs || dataSource?.type === 'live') return
+    const update = () => setNowMs(Date.now())
+    update()
+    const id = setInterval(update, 30000)
+    return () => clearInterval(id)
+  }, [cachedAtMs, dataSource?.type])
+
   if (!dataSource || dataSource.type === 'live') return null
-  const stamp = dataSource.cachedAt
-    ? dataSource.cachedAt.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'America/New_York',
-      })
-    : null
-  const label = stamp ? `CACHE · ${stamp}` : 'CACHE'
+  const ago = cachedAtMs ? Math.round((nowMs - cachedAtMs) / 60000) : null
+  const label = ago !== null ? `DB CACHE · ${ago < 1 ? '<1' : ago}m ago` : 'DB CACHE'
   return (
     <div style={{
       display: 'flex',

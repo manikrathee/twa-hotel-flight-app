@@ -136,6 +136,7 @@ export default function useFlights(selectedIcao = null) {
 
       setFlights(filtered)
       setLastUpdated(new Date())
+      setIsStale(false)
       setError(null)
       setRateLimitStatus('ok')
       setBackoffUntil(null)
@@ -177,16 +178,18 @@ export default function useFlights(selectedIcao = null) {
     }
   }, [pollMs, scheduleNext])
 
-  loadRef.current = load
+  useEffect(() => {
+    loadRef.current = load
+  }, [load])
 
   useEffect(() => {
+    const initialLoadId = setTimeout(() => { loadRef.current?.() }, 0)
     mountedRef.current = true
-    load()
 
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         clearTimeout(timerRef.current)
-        load()
+        loadRef.current?.()
       } else {
         clearTimeout(timerRef.current)
       }
@@ -195,17 +198,16 @@ export default function useFlights(selectedIcao = null) {
 
     return () => {
       mountedRef.current = false
+      clearTimeout(initialLoadId)
       clearTimeout(timerRef.current)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [load])
+  }, [])
 
   useEffect(() => {
-    if (!lastUpdated) { setIsStale(false); return }
-    setIsStale(false)
+    if (!lastUpdated) return
     const ms = STALE_SHOW_MS - (Date.now() - lastUpdated.getTime())
-    if (ms <= 0) { setIsStale(true); return }
-    const id = setTimeout(() => setIsStale(true), ms)
+    const id = setTimeout(() => setIsStale(true), Math.max(ms, 0))
     return () => clearTimeout(id)
   }, [lastUpdated])
 
