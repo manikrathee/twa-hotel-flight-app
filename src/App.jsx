@@ -5,6 +5,7 @@ import NearbyList from './components/NearbyList'
 import FlightDetail from './components/FlightDetail'
 import useFlights from './hooks/useFlights'
 import useWeather from './hooks/useWeather'
+import useFlightHistory from './hooks/useFlightHistory'
 
 const LIST_PANEL_MIN = 320
 const LIST_PANEL_MAX = 560
@@ -13,6 +14,17 @@ const DETAIL_PANEL_MAX = 760
 const VIEWPORT_LIST_RATIO = { normal: 0.30, constrained: 0.24 }
 const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.22, constrained: 0.18 }
 const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
+
+const MODE_LIVE = 'live'
+const MODE_TIMELAPSE = 'timelapse'
+
+const HISTORY_WINDOWS = [
+  { label: 'Last day', ms: 24 * 60 * 60 * 1000 },
+  { label: 'Last 3 days', ms: 3 * 24 * 60 * 60 * 1000 },
+  { label: 'Last week', ms: 7 * 24 * 60 * 60 * 1000 },
+]
+
+const TIMELAPSE_SPEEDS = [2, 3, 4]
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v))
@@ -24,6 +36,7 @@ function clampPanelSize(value, minimum, maximum) {
 
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
+  const [selectedSource, setSelectedSource] = useState('live')
   const [track, setTrack] = useState(null)
   const [runwayAlert, setRunwayAlert] = useState(null)
   const [viewportWidth, setViewportWidth] = useState(() => {
@@ -31,6 +44,13 @@ export default function App() {
     return window.innerWidth
   })
   const searchInputRef = useRef(null)
+
+  const [viewMode, setViewMode] = useState(MODE_LIVE)
+  const [historyWindowMs, setHistoryWindowMs] = useState(HISTORY_WINDOWS[0].ms)
+  const [timelapsePlaying, setTimelapsePlaying] = useState(true)
+  const [timelapseSpeed, setTimelapseSpeed] = useState(TIMELAPSE_SPEEDS[1] ?? 2)
+  const isHistoryMode = viewMode !== MODE_LIVE
+
   const {
     flights,
     loading,
@@ -41,23 +61,43 @@ export default function App() {
     isStale,
     dataSource,
     pollMs,
-    isConstrained
+    isConstrained,
   } = useFlights(selectedId)
+
+  const history = useFlightHistory({
+    enabled: isHistoryMode,
+    windowMs: historyWindowMs,
+    isPlaying: viewMode === MODE_TIMELAPSE && timelapsePlaying,
+    speedMultiplier: timelapseSpeed,
+    refreshKey: `${lastUpdated?.getTime() ?? 0}-${viewMode}-${historyWindowMs}`,
+  })
+
   const { weather } = useWeather()
   const hasFlights = flights.length > 0
-  const isInitialLoad = loading && !hasFlights
+  const isInitialLoad = loading && !hasFlights && !isHistoryMode
   const constrainedMode = isConstrained || rateLimitStatus === 'blocked' || dataSource?.type === 'cache' || flights.length > 120
   const widthMode = constrainedMode ? 'constrained' : 'normal'
-  const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
+
+  const selectedLiveFlight = flights.find(f => f.icao24 === selectedId) ?? null
+  const selectedHistoryFlight = selectedId ? (history.latestByIcao?.get(selectedId) ?? null) : null
+  const selectedFlight = useMemo(() => {
+    if (selectedSource === 'history') return selectedHistoryFlight || selectedLiveFlight || null
+    return selectedLiveFlight || selectedHistoryFlight || null
+  }, [selectedSource, selectedHistoryFlight, selectedLiveFlight])
+
+  const activeFlights = isHistoryMode ? history.activeFlights : flights
   const hasSelectedFlight = Boolean(selectedFlight)
   const effectiveSelectedId = selectedFlight ? selectedId : null
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const onResize = () => setViewportWidth(window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
+  const selectedHistoryTrack = selectedId ? (history.trackByIcao?.get(selectedId) || null) : null
+  const trackForMap = selectedSource === 'history' ? selectedHistoryTrack : track
+  const detailRefreshMs = selectedFlight ? 1000 : pollMs
+  const historyTimeline = isHistoryMode ? {
+    mode: viewMode,
+    speed: timelapseSpeed,
+    playing: timelapsePlaying,
+    range: history.range,
+    cursorMs: history.cursorMs,
+  } : null
 
   const listWidth = useMemo(() => {
     const ratios = hasSelectedFlight ? VIEWPORT_LIST_RATIO_WITH_DETAILS : VIEWPORT_LIST_RATIO
@@ -68,26 +108,58 @@ export default function App() {
     return clampPanelSize(viewportWidth * VIEWPORT_DETAIL_RATIO[widthMode], DETAIL_PANEL_MIN, DETAIL_PANEL_MAX)
   }, [viewportWidth, widthMode])
 
-  const detailRefreshMs = selectedFlight ? 1000 : pollMs
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const activateFlight = useCallback((icao24) => {
     if (!icao24) return
     setSelectedId(icao24)
+    setSelectedSource('live')
     setTrack(null)
     setRunwayAlert(null)
   }, [])
 
-  const handleSelect = useCallback((icao24) => {
+  const handleSelect = useCallback((icao24, source = 'live') => {
     setSelectedId(prev => {
-      if (prev === icao24) { setTrack(null); return null }
-      setTrack(null)
+      if (prev === icao24 && selectedSource === source) {
+        setSelectedSource('live')
+        setTrack(null)
+        return null
+      }
+
+      setSelectedSource(source)
+      if (source === 'live') setTrack(null)
       return icao24
     })
-    setRunwayAlert(null)
-  }, [])
+
+    if (source === 'live') setRunwayAlert(null)
+  }, [selectedSource])
+
+  const handleHistorySelect = useCallback((icao24) => {
+    handleSelect(icao24, 'history')
+  }, [handleSelect])
 
   const handleClose = useCallback(() => {
     setSelectedId(null)
+    setSelectedSource('live')
+    setTrack(null)
+  }, [])
+
+  const onViewModeChange = useCallback((mode) => {
+    setViewMode(mode)
+    if (mode !== MODE_TIMELAPSE) setTimelapsePlaying(true)
+
+    if (mode === MODE_LIVE) {
+      setSelectedSource('live')
+      setTrack(null)
+      return
+    }
+
+    setSelectedSource('history')
     setTrack(null)
     setRunwayAlert(null)
   }, [])
@@ -138,9 +210,9 @@ export default function App() {
 
     window.addEventListener('keydown', onGlobalKeyDown)
     return () => window.removeEventListener('keydown', onGlobalKeyDown)
-  }, [handleClose, effectiveSelectedId])
+  }, [effectiveSelectedId, handleClose])
 
-  if (error && flights.length === 0) {
+  if (error && flights.length === 0 && !isHistoryMode) {
     return (
       <div className="app">
         <HUDBar
@@ -152,33 +224,43 @@ export default function App() {
           isStale={isStale}
           dataSource={dataSource}
           isConstrained={constrainedMode}
+          viewMode={viewMode}
+          historyWindows={HISTORY_WINDOWS}
+          onViewModeChange={onViewModeChange}
+          historyWindowMs={historyWindowMs}
+          onHistoryWindowChange={setHistoryWindowMs}
+          timelapseSpeed={timelapseSpeed}
+          onTimelapseSpeedChange={setTimelapseSpeed}
+          timelapsePlaying={timelapsePlaying}
+          onTimelapsePlayingChange={setTimelapsePlaying}
+          hasHistoryData={history.isReady}
         />
-      <div role="status" aria-live="assertive" aria-atomic="true" style={{
+        <div role="status" aria-live="assertive" aria-atomic="true" style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-        <div style={{
-          width: 58, height: 58, borderRadius: '50%',
-          border: '1px solid rgba(var(--red-alt-rgb), 0.45)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 0 24px rgba(var(--red-alt-rgb), 0.18)',
-          marginBottom: 6,
-        }}>
-          <span style={{ fontSize: 24, color: 'var(--red)' }}>⚠</span>
+          <div style={{
+            width: 58, height: 58, borderRadius: '50%',
+            border: '1px solid rgba(var(--red-alt-rgb), 0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 24px rgba(var(--red-alt-rgb), 0.18)',
+            marginBottom: 6,
+          }}>
+            <span style={{ fontSize: 24, color: 'var(--red)' }}>⚠</span>
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--heading)', letterSpacing: 0.2 }}>
+            NO ADS-B FEED
+          </div>
+          <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1 }}>
+            ADS-B FEED UNAVAILABLE
+          </div>
+          <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1, textAlign: 'center' }}>
+            {error}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', opacity: 0.8, marginTop: 2 }}>
+            Retrying automatically every 15 seconds
+          </div>
         </div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--heading)', letterSpacing: 0.2 }}>
-          NO ADS-B FEED
-        </div>
-        <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1 }}>
-          ADS-B FEED UNAVAILABLE
-        </div>
-        <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1, textAlign: 'center' }}>
-          {error}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', opacity: 0.8, marginTop: 2 }}>
-          Retrying automatically every 15 seconds
-        </div>
-      </div>
       </div>
     )
   }
@@ -186,7 +268,7 @@ export default function App() {
   return (
     <div className="app">
       <HUDBar
-        flights={flights}
+        flights={isHistoryMode ? history.activeFlights : flights}
         weather={weather}
         rateLimitStatus={rateLimitStatus}
         backoffUntil={backoffUntil}
@@ -194,29 +276,41 @@ export default function App() {
         isStale={isStale}
         dataSource={dataSource}
         isConstrained={constrainedMode}
+        viewMode={viewMode}
+        historyWindows={HISTORY_WINDOWS}
+        onViewModeChange={onViewModeChange}
+        historyWindowMs={historyWindowMs}
+        onHistoryWindowChange={setHistoryWindowMs}
+        timelapseSpeed={timelapseSpeed}
+        onTimelapseSpeedChange={setTimelapseSpeed}
+        timelapsePlaying={timelapsePlaying}
+        onTimelapsePlayingChange={setTimelapsePlaying}
+        hasHistoryData={history.isReady}
       />
 
-      {/* main-layout is position:relative so the detail overlay can be absolute */}
       <div className="main-layout">
         <NearbyList
-          flights={flights}
+          flights={activeFlights}
           selectedId={effectiveSelectedId}
-          onSelect={handleSelect}
+          onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
           searchInputRef={searchInputRef}
           width={listWidth}
           loading={loading}
           error={error}
         />
 
-        {/* Map always fills remaining space — NEVER resizes when panel opens */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
           <FlightMap
-            flights={flights}
+            flights={activeFlights}
             selectedFlight={selectedFlight}
-            onSelect={handleSelect}
+            onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
+            onHistorySelect={isHistoryMode ? handleHistorySelect : null}
             onRunwaySelect={handleRunwaySelection}
-            track={selectedFlight ? track : null}
+            track={trackForMap}
             detailPanelWidth={selectedFlight ? detailWidth : 0}
+            historyPathFeatures={isHistoryMode ? history.pathFeatures : null}
+            congestionFeatures={isHistoryMode ? history.congestion : null}
+            timeline={historyTimeline}
           />
           {runwayAlert && (
             <div style={{
@@ -280,18 +374,18 @@ export default function App() {
           )}
         </div>
 
-        {/* Detail panel: absolute overlay, slides in/out via CSS — map never reflows */}
         <div
           className={`detail-overlay${selectedFlight ? ' open' : ''}`}
           style={{ width: detailWidth }}
         >
           {selectedFlight && (
             <FlightDetail
-              key={selectedFlight?.icao24}
+              key={`${selectedSource}-${selectedFlight?.icao24}`}
               flight={selectedFlight}
               onClose={handleClose}
               autoFocusCloseButton
-              onTrackLoad={setTrack}
+              onTrackLoad={selectedSource === 'live' ? setTrack : undefined}
+              preloadedTrack={selectedSource === 'history' ? trackForMap : null}
               lastUpdated={lastUpdated}
               refreshMs={detailRefreshMs}
             />

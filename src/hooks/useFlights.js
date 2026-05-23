@@ -4,6 +4,7 @@ import { fetchCallsignRoute } from '../api/adsbdb'
 import { isBlocked, backoffRemainingMs } from '../api/rateLimitManager'
 import { distanceKm } from '../utils/geo'
 import { flightCache } from '../cache/flightCache'
+import { recordFlightSamples } from '../db/flightHistoryDb'
 import { JFK, TWA_HOTEL, TWA_VISIBLE_RADIUS_MI, routeTouchesJfk } from '../config/airspace'
 
 const BASE_POLL_MS          = 15_000
@@ -379,6 +380,8 @@ export default function useFlights(selectedIcao = null) {
         flightsRef.current = filtered
       }
 
+      await recordFlightSamples(filtered, Date.now())
+
       setLastUpdated(new Date())
       setIsStale(false)
       setError(null)
@@ -409,9 +412,8 @@ export default function useFlights(selectedIcao = null) {
           setIsConstrained(true)
           const filtered = await enrichFlights(cached.flights, { constrained: true })
           if (!mountedRef.current) return
-
           latestRef.current = filtered
-
+          await recordFlightSamples(filtered, cached.cachedAt?.getTime() || Date.now())
           if (hasFlightsChanged(flightsRef.current, filtered)) {
             setFlights(filtered)
             flightsRef.current = filtered
