@@ -1,0 +1,39 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img "TWA Hotel" [ref=e7]
+      - generic [ref=e8]: FLIGHT DECK
+    - generic [ref=e12]: LIVE
+    - generic [ref=e13]:
+      - generic [ref=e14]: AIRCRAFT
+      - generic [ref=e15]: —
+    - generic [ref=e17]: KJFK · TWA HOTEL · 40.64°N 73.78°W
+    - generic [ref=e18]:
+      - generic [ref=e19]: 17:34:20 LCL
+      - generic [ref=e20]: 21:34:20Z
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: NEARBY TRAFFIC
+        - generic [ref=e25]: "0"
+      - generic [ref=e26]:
+        - generic [ref=e27]: CALLSIGN
+        - generic [ref=e28]: ALT
+        - generic [ref=e29]: SPD
+      - generic [ref=e31]: Loading traffic...
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - region "Map" [ref=e35]
+        - generic [ref=e36]:
+          - button "Zoom in" [ref=e37] [cursor=pointer]
+          - button "Zoom out" [ref=e39] [cursor=pointer]
+          - button "Drag to rotate map, click to reset north" [ref=e41]
+      - button "⊕ JFK VIEW" [ref=e43] [cursor=pointer]
+      - generic [ref=e44]:
+        - generic [ref=e47]: FLIGHT PATH
+        - generic [ref=e50]: TWA HOTEL
+        - generic [ref=e53]: JFK RUNWAYS
+  - generic [ref=e54]:
+    - img [ref=e56]
+    - generic [ref=e62]: ACQUIRING TRAFFIC
+    - generic [ref=e63]: Connecting to OpenSky Network · KJFK
