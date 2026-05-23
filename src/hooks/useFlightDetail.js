@@ -2,6 +2,7 @@ import { useEffect, useReducer } from 'react'
 import { fetchAircraftMeta, fetchTrack } from '../api/opensky'
 import { fetchCallsignRoute, fetchAircraftInfo } from '../api/adsbdb'
 import { flightCache } from '../cache/flightCache'
+import { recordTrackPoints } from '../db/flightHistoryDb'
 
 function initialDetailState() {
   return {
@@ -86,7 +87,7 @@ function isUsableText(value) {
   return !/^(unknown|n\/a|na|none|not available|tbd)$/i.test(clean)
 }
 
-export default function useFlightDetail(flight) {
+export default function useFlightDetail(flight, preloadedTrack = null) {
   const [state, dispatch] = useReducer(detailReducer, null, initialDetailState)
   const icao24 = flight?.icao24
   const callsign = flight?.callsign
@@ -102,13 +103,14 @@ export default function useFlightDetail(flight) {
     // Clear stale state before serving cache so a no-cache flight doesn't show prior flight's data
     dispatch({ type: 'reset' })
 
-    // Serve from cache immediately — no flicker for previously viewed flights
+    // Serve from cache or provided history track immediately — no flicker for previously viewed flights
     const cachedTrack = flightCache.getTrack(icao24)
+    const seededTrack = preloadedTrack ?? cachedTrack
     const cachedAircraft = flightCache.getAircraft(icao24)
-    if (cachedTrack) dispatch({ type: 'setTrack', value: cachedTrack })
+    if (seededTrack) dispatch({ type: 'setTrack', value: seededTrack })
     if (cachedAircraft) dispatch({ type: 'setAircraftInfo', value: cachedAircraft })
 
-    const needsTrack = !cachedTrack
+    const needsTrack = !seededTrack
     const needsAircraft = !hasUsableAircraftProfile(cachedAircraft)
 
     if (!needsTrack && !needsAircraft) {
@@ -133,7 +135,10 @@ export default function useFlightDetail(flight) {
           fetchTrack(icao24, signal)
             .then(d => {
               if (ignored) return
-              if (d) flightCache.setTrack(icao24, d)
+              if (d) {
+                flightCache.setTrack(icao24, d)
+                recordTrackPoints(icao24, d)
+              }
               dispatch({ type: 'setTrack', value: d })
             })
             .catch(e => { if (e?.name !== 'AbortError' && !ignored) dispatch({ type: 'setTrack', value: null }) })
@@ -170,6 +175,11 @@ export default function useFlightDetail(flight) {
     loadMissing()
     return () => { ignored = true; ctrl.abort() }
   }, [icao24, callsign])
+
+  useEffect(() => {
+    if (!icao24 || !preloadedTrack) return
+    dispatch({ type: 'setTrack', value: preloadedTrack })
+  }, [icao24, preloadedTrack])
 
   return state
 }

@@ -62,6 +62,118 @@ function DataSourceBadge({ dataSource }) {
   )
 }
 
+function ModeControls({
+  viewMode,
+  historyWindows,
+  onViewModeChange,
+  historyWindowMs,
+  onHistoryWindowChange,
+  timelapseSpeed,
+  onTimelapseSpeedChange,
+  timelapsePlaying,
+  onTimelapsePlayingChange,
+  hasHistoryData,
+}) {
+  const canUseWindow = viewMode !== 'live'
+
+  return (
+    <div style={{
+      display: 'flex',
+      gap: 10,
+      alignItems: 'center',
+      fontSize: 11,
+      color: 'var(--text-dim)',
+      paddingTop: 2,
+      flexWrap: 'wrap',
+    }}>
+      <select
+        value={viewMode}
+        aria-label="Select flight map mode"
+        onChange={e => onViewModeChange(e.target.value)}
+        style={{
+          borderRadius: 5,
+          border: '1px solid var(--panel-border)',
+          background: 'var(--panel-strong)',
+          color: 'var(--heading)',
+          padding: '5px 7px',
+          fontSize: 11,
+          fontWeight: 600,
+        }}
+      >
+        <option value="live">Live</option>
+        <option value="history">History</option>
+        <option value="timelapse">Timelapse</option>
+      </select>
+
+      <select
+        value={historyWindowMs}
+        aria-label="Select flight history window"
+        disabled={!canUseWindow}
+        onChange={e => onHistoryWindowChange(Number(e.target.value))}
+        style={{
+          borderRadius: 5,
+          border: '1px solid var(--panel-border)',
+          background: canUseWindow ? 'var(--panel-strong)' : 'transparent',
+          color: canUseWindow ? 'var(--heading)' : 'var(--text-dim)',
+          padding: '5px 7px',
+          fontSize: 11,
+        }}
+      >
+        {historyWindows.map(window => (
+          <option key={window.ms} value={window.ms}>{window.label}</option>
+        ))}
+      </select>
+
+      <select
+        value={timelapseSpeed}
+        aria-label="Select timelapse speed"
+        disabled={viewMode !== 'timelapse' || !hasHistoryData}
+        onChange={e => onTimelapseSpeedChange(Number(e.target.value))}
+        style={{
+          borderRadius: 5,
+          border: '1px solid var(--panel-border)',
+          background: hasHistoryData ? 'var(--panel-strong)' : 'transparent',
+          color: hasHistoryData ? 'var(--heading)' : 'var(--text-dim)',
+          padding: '5px 7px',
+          fontSize: 11,
+        }}
+      >
+        {[2, 3, 4].map(speed => (
+          <option key={speed} value={speed}>{`${speed}x`}</option>
+        ))}
+      </select>
+
+      <button
+        type="button"
+        onClick={() => onTimelapsePlayingChange(!timelapsePlaying)}
+        disabled={viewMode !== 'timelapse' || !hasHistoryData}
+        aria-label={timelapsePlaying ? 'Pause timelapse replay' : 'Play timelapse replay'}
+        style={{
+          borderRadius: 5,
+          border: '1px solid var(--panel-border)',
+          background: 'var(--panel-strong)',
+          color: timelapsePlaying ? 'var(--green)' : 'var(--text)',
+          fontSize: 11,
+          fontWeight: 600,
+          padding: '5px 7px',
+          whiteSpace: 'nowrap',
+          opacity: viewMode === 'timelapse' && hasHistoryData ? 1 : 0.5,
+        }}
+      >
+        {timelapsePlaying ? '⏸ Pause' : '▶ Play'}
+      </button>
+
+      <span style={{
+        color: 'var(--text-dim)',
+        whiteSpace: 'nowrap',
+        fontSize: 10,
+      }}>
+        {hasHistoryData ? 'HISTORY READY' : 'NO HISTORY'}
+      </span>
+    </div>
+  )
+}
+
 export default function HUDBar({
   flights,
   weather,
@@ -71,6 +183,16 @@ export default function HUDBar({
   isStale,
   dataSource,
   isConstrained,
+  viewMode = 'live',
+  historyWindows = [{ label: 'Last day', ms: 24 * 60 * 60 * 1000 }],
+  onViewModeChange = () => {},
+  historyWindowMs = historyWindows[0]?.ms ?? 24 * 60 * 60 * 1000,
+  onHistoryWindowChange = () => {},
+  timelapseSpeed = 2,
+  onTimelapseSpeedChange = () => {},
+  timelapsePlaying = true,
+  onTimelapsePlayingChange = () => {},
+  hasHistoryData = false,
 }) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
@@ -141,6 +263,21 @@ export default function HUDBar({
           )}
           <Clock />
         </div>
+      </div>
+
+      <div className="hudbar-controls">
+        <ModeControls
+          viewMode={viewMode}
+          historyWindows={historyWindows}
+          onViewModeChange={onViewModeChange}
+          historyWindowMs={historyWindowMs}
+          onHistoryWindowChange={onHistoryWindowChange}
+          timelapseSpeed={timelapseSpeed}
+          onTimelapseSpeedChange={onTimelapseSpeedChange}
+          timelapsePlaying={timelapsePlaying}
+          onTimelapsePlayingChange={onTimelapsePlayingChange}
+          hasHistoryData={hasHistoryData}
+        />
       </div>
     </div>
   )

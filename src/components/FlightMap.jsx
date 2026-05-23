@@ -9,6 +9,7 @@ const FALLBACK_THEME = {
   cyanRgb: '112, 201, 227',
   cyanAltRgb: '0, 195, 255',
   redAltRgb: '227, 30, 38',
+  amberRgb: '243, 190, 124',
   textSoftRgb: '84, 96, 112',
 }
 
@@ -17,6 +18,8 @@ function resolveThemeRGB(cssVar, fallback) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim()
   return value || fallback
 }
+
+const EMPTY_GEOJSON = { type: 'FeatureCollection', features: [] }
 
 const RUNWAY_INCOMING = {
   maxLineDistanceKm: 1.55,
@@ -122,13 +125,18 @@ export default function FlightMap({
   selectedFlight,
   onSelect,
   onRunwaySelect,
+  onHistorySelect,
   track,
+  historyPathFeatures,
+  congestionFeatures,
+  timeline,
   detailPanelWidth = 0,
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
+  const onHistorySelectRef = useRef(null)
   const prevIcaoSetRef = useRef(null)
   const onRunwaySelectRef = useRef(onRunwaySelect)
   const flightsRef = useRef(flights)
@@ -142,11 +150,13 @@ export default function FlightMap({
     cyan: resolveThemeRGB('--cyan-rgb', FALLBACK_THEME.cyanRgb),
     cyanAlt: resolveThemeRGB('--cyan-alt-rgb', FALLBACK_THEME.cyanAltRgb),
     redAlt: resolveThemeRGB('--red-alt-rgb', FALLBACK_THEME.redAltRgb),
+    amber: resolveThemeRGB('--amber-rgb', FALLBACK_THEME.amberRgb),
     textSoft: resolveThemeRGB('--text-soft-rgb', FALLBACK_THEME.textSoftRgb),
   }
 
   useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
   useEffect(() => { onRunwaySelectRef.current = onRunwaySelect }, [onRunwaySelect])
+  useEffect(() => { onHistorySelectRef.current = onHistorySelect }, [onHistorySelect])
   useEffect(() => { flightsRef.current = flights }, [flights])
   useEffect(() => { selectedFlightRef.current = selectedFlight }, [selectedFlight])
 
@@ -239,6 +249,57 @@ export default function FlightMap({
           'line-width': 2,
           'line-opacity': 0.7,
           'line-dasharray': [6, 4],
+        },
+      })
+
+      map.addSource('history-paths', {
+        type: 'geojson',
+        data: EMPTY_GEOJSON,
+      })
+      map.addLayer({
+        id: 'history-paths-line',
+        type: 'line',
+        source: 'history-paths',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          visibility: 'visible',
+        },
+        paint: {
+          'line-color': [
+            'case',
+            ['==', ['get', 'sampleKind'], 'track'],
+            withAlpha(theme.redAlt, 0.42),
+            withAlpha(theme.cyanAlt, 0.32),
+          ],
+          'line-width': ['interpolate', ['linear'], ['coalesce', ['get', 'pointCount'], 2], 2, 1.4, 12, 3.4],
+          'line-opacity': ['interpolate', ['linear'], ['coalesce', ['get', 'pointCount'], 2], 2, 0.22, 12, 0.9],
+        },
+      })
+
+      map.addSource('congestion', {
+        type: 'geojson',
+        data: EMPTY_GEOJSON,
+      })
+      map.addLayer({
+        id: 'congestion-heat',
+        type: 'circle',
+        source: 'congestion',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['get', 'count'], 1, 5, 8, 16, 20, 30],
+          'circle-color': [
+            'interpolate',
+            ['linear'],
+            ['get', 'count'],
+            1,
+            `rgba(${theme.cyan}, 0.22)`,
+            8,
+            `rgba(${theme.amber}, 0.35)`,
+            20,
+            `rgba(${theme.redAlt}, 0.55)`,
+          ],
+          'circle-opacity': ['interpolate', ['linear'], ['get', 'count'], 1, 0.16, 20, 0.45],
+          'circle-stroke-width': 0,
         },
       })
 
@@ -353,6 +414,18 @@ export default function FlightMap({
         })
       })
 
+      map.on('mouseenter', 'history-paths-line', () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mouseleave', 'history-paths-line', () => {
+        map.getCanvas().style.cursor = ''
+      })
+      map.on('click', 'history-paths-line', e => {
+        const icao24 = e.features?.[0]?.properties?.icao24
+        if (!icao24) return
+        onHistorySelectRef.current?.(icao24)
+      })
+
       isLoadedRef.current = true
       mapRef.current = map
       setMapReady(true)
@@ -399,6 +472,20 @@ export default function FlightMap({
 
     prevIcaoSetRef.current = nextSet
   }, [flights, selectedIcao, mapReady])
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    const src = mapRef.current.getSource('history-paths')
+    if (!src) return
+    src.setData(historyPathFeatures?.features?.length ? historyPathFeatures : EMPTY_GEOJSON)
+  }, [mapReady, historyPathFeatures])
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    const src = mapRef.current.getSource('congestion')
+    if (!src) return
+    src.setData(congestionFeatures?.features?.length ? congestionFeatures : EMPTY_GEOJSON)
+  }, [mapReady, congestionFeatures])
 
   // Pulse ring on selected plane (single DOM marker)
   useEffect(() => {
@@ -563,7 +650,36 @@ export default function FlightMap({
         </div>
       )}
 
-      {/* Back to JFK button */}
+      {(timeline?.mode === 'timelapse' || timeline?.mode === 'history') && timeline?.range?.startMs && timeline?.range?.endMs && (
+        <div style={{
+          position: 'absolute', top: 58, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 10,
+          background: 'rgba(var(--red-alt-rgb), 0.09)',
+          border: '1px solid rgba(var(--red-alt-rgb), 0.3)',
+          borderRadius: 5,
+          padding: '5px 14px',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          boxShadow: '0 2px 16px rgba(0, 0, 0, 0.12)',
+          pointerEvents: 'none',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--red-alt)', letterSpacing: 2.5, fontWeight: 600 }}>
+            {timeline.mode.toUpperCase()}
+          </span>
+          <span style={{ fontSize: 10, color: 'rgba(var(--red-alt-rgb), 0.65)', letterSpacing: 0.6 }}>
+            {new Date(timeline.range.startMs).toLocaleString()} → {new Date(timeline.range.endMs).toLocaleString()}
+          </span>
+          {timeline.mode === 'timelapse' && (
+            <span style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: 0.6 }}>
+              T+{Math.round((timeline.cursorMs - timeline.range.startMs) / 1000 / 60)}m · {timeline.speed}x
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Reset view button */}
       <button
         onClick={resetView}
         type="button"
@@ -603,6 +719,9 @@ export default function FlightMap({
         boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
       }}>
         <Row color="var(--cyan-alt)" label="FLIGHT PATH" line />
+        {(timeline?.mode === 'timelapse' || timeline?.mode === 'history') && (
+          <Row color="var(--amber)" label="AIR TRAFFIC CONGESTION" circle />
+        )}
         <Row color="var(--red-alt)" label="TWA HOTEL" dot />
         <Row color="rgba(var(--text-soft-rgb), 0.4)" label="JFK RUNWAYS" line />
       </div>

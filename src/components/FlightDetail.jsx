@@ -5,9 +5,17 @@ import FlightPath from './FlightPath'
 import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
 import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
 
-export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated, refreshMs, autoFocusCloseButton }) {
+export default function FlightDetail({
+  flight,
+  onClose,
+  onTrackLoad,
+  preloadedTrack = null,
+  lastUpdated,
+  refreshMs,
+  autoFocusCloseButton,
+}) {
   const closeButtonRef = useRef(null)
-  const { track, route, aircraftInfo, loading } = useFlightDetail(flight)
+  const { track, route, aircraftInfo, loading } = useFlightDetail(flight, preloadedTrack)
   const [showPath, setShowPath] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
