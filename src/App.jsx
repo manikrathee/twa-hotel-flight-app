@@ -34,6 +34,10 @@ function clampPanelSize(value, minimum, maximum) {
   return clamp(Math.round(value), minimum, maximum)
 }
 
+function normalizeFlightId(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [selectedSource, setSelectedSource] = useState('live')
@@ -77,15 +81,27 @@ export default function App() {
   const isInitialLoad = loading && !hasFlights && !isHistoryMode
   const constrainedMode = isConstrained || rateLimitStatus === 'blocked' || dataSource?.type === 'cache' || flights.length > 120
   const widthMode = constrainedMode ? 'constrained' : 'normal'
-
-  const selectedLiveFlight = flights.find(f => f.icao24 === selectedId) ?? null
-  const selectedHistoryFlight = selectedId ? (history.latestByIcao?.get(selectedId) ?? null) : null
-  const selectedFlight = useMemo(() => {
-    if (selectedSource === 'history') return selectedHistoryFlight || selectedLiveFlight || null
-    return selectedLiveFlight || selectedHistoryFlight || null
-  }, [selectedSource, selectedHistoryFlight, selectedLiveFlight])
-
   const activeFlights = isHistoryMode ? history.activeFlights : flights
+
+  const selectedLiveFlight = selectedId
+    ? flights.find(f => String(f.icao24 || '').toLowerCase() === selectedId)
+    : null
+  const selectedHistoryFlight = selectedId ? (history.latestByIcao?.get(selectedId) ?? null) : null
+  const selectedFlightForMap = useMemo(() => {
+    if (!selectedId) return null
+    return activeFlights.find(f => String(f.icao24 || '').toLowerCase() === selectedId) || null
+  }, [activeFlights, selectedId])
+
+  const selectedFlight = useMemo(() => {
+    if (!selectedId) return null
+
+    if (selectedSource === 'history' || isHistoryMode) {
+      return selectedFlightForMap || selectedHistoryFlight || selectedLiveFlight
+    }
+
+    return selectedLiveFlight || selectedFlightForMap || selectedHistoryFlight
+  }, [isHistoryMode, selectedFlightForMap, selectedId, selectedSource, selectedHistoryFlight, selectedLiveFlight])
+
   const hasSelectedFlight = Boolean(selectedFlight)
   const effectiveSelectedId = selectedFlight ? selectedId : null
   const selectedHistoryTrack = selectedId ? (history.trackByIcao?.get(selectedId) || null) : null
@@ -116,16 +132,20 @@ export default function App() {
   }, [])
 
   const activateFlight = useCallback((icao24) => {
-    if (!icao24) return
-    setSelectedId(icao24)
+    const nextId = normalizeFlightId(icao24)
+    if (!nextId) return
+    setSelectedId(nextId)
     setSelectedSource('live')
     setTrack(null)
     setRunwayAlert(null)
   }, [])
 
   const handleSelect = useCallback((icao24, source = 'live') => {
+    const nextId = normalizeFlightId(icao24)
+    if (!nextId) return
+
     setSelectedId(prev => {
-      if (prev === icao24 && selectedSource === source) {
+      if (prev === nextId && selectedSource === source) {
         setSelectedSource('live')
         setTrack(null)
         return null
@@ -133,7 +153,7 @@ export default function App() {
 
       setSelectedSource(source)
       if (source === 'live') setTrack(null)
-      return icao24
+      return nextId
     })
 
     if (source === 'live') setRunwayAlert(null)
@@ -302,7 +322,7 @@ export default function App() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
           <FlightMap
             flights={activeFlights}
-            selectedFlight={selectedFlight}
+            selectedFlight={selectedFlightForMap}
             onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
             onHistorySelect={isHistoryMode ? handleHistorySelect : null}
             onRunwaySelect={handleRunwaySelection}

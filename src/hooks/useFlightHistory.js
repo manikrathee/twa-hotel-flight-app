@@ -147,7 +147,10 @@ export default function useFlightHistory({
   const [cursorMs, setCursorMs] = useState(0)
   const [loadError, setLoadError] = useState(null)
   const timerRef = useRef(null)
-  const lastTickRef = useRef(0)
+  const lastTickRef = useRef(Date.now())
+  const rangeRef = useRef(null)
+  const cursorMsRef = useRef(cursorMs)
+  const wasPlayingRef = useRef(isPlaying)
 
   const loadSamples = useCallback(async () => {
     if (!enabled || !windowMs) {
@@ -167,16 +170,41 @@ export default function useFlightHistory({
 
       setSamples(nextSamples)
       setRange(nextRange)
+      const prevRange = rangeRef.current
+      const wasPlaying = wasPlayingRef.current
 
-      if (nextRange) {
-        setCursorMs(nextRange.endMs)
+      if (!nextRange) {
+        setCursorMs(Date.now())
+      } else if (!prevRange) {
+        setCursorMs(isPlaying ? nextRange.startMs : nextRange.endMs)
+      } else {
+        let nextCursorMs = isPlaying ? cursorMsRef.current : nextRange.endMs
+        const span = nextRange.endMs - nextRange.startMs
+
+        if (!wasPlaying && isPlaying) {
+          nextCursorMs = nextRange.startMs
+        } else if (prevRange.startMs !== nextRange.startMs) {
+          nextCursorMs = nextRange.startMs
+        } else if (span > 0 && prevRange.endMs !== nextRange.endMs) {
+          const offsetFromStart = cursorMsRef.current - prevRange.startMs
+          nextCursorMs = nextRange.startMs + Math.max(0, Math.min(offsetFromStart, span))
+        }
+
+        if (isPlaying && span > 0) {
+          if (nextCursorMs < nextRange.startMs) nextCursorMs = nextRange.startMs
+          if (nextCursorMs > nextRange.endMs) nextCursorMs = nextRange.endMs
+        }
+
+        setCursorMs(Math.round(nextCursorMs))
       }
+      rangeRef.current = nextRange
+      wasPlayingRef.current = isPlaying
     } catch (error) {
       setLoadError(error)
     } finally {
       setIsLoading(false)
     }
-  }, [enabled, windowMs])
+  }, [enabled, windowMs, isPlaying])
 
   useEffect(() => {
     let cancelled = false
@@ -220,6 +248,10 @@ export default function useFlightHistory({
 
     return () => clearInterval(timerRef.current)
   }, [enabled, isPlaying, range, speedMultiplier])
+
+  useEffect(() => {
+    cursorMsRef.current = cursorMs
+  }, [cursorMs])
 
   const groupedByIcao = useMemo(() => buildFlightsByIcao(samples), [samples])
 
