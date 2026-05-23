@@ -8,6 +8,12 @@ import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } fr
 export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated, refreshMs }) {
   const { track, route, aircraftInfo, loading } = useFlightDetail(flight)
   const [showPath, setShowPath] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => { onTrackLoad?.(track) }, [onTrackLoad, track])
 
@@ -38,8 +44,8 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
   const routeMiles = routeDistanceMiles(origin, dest)
 
   // Contact freshness
-  const lastContactLagSec = flight.last_contact && flight.time_position
-    ? Math.max(0, flight.last_contact - flight.time_position)
+  const lastContactLagSec = flight.last_contact
+    ? Math.max(0, Math.floor(nowMs / 1000) - flight.last_contact)
     : null
   const lastContactStamp = flight.last_contact
     ? `${new Date(flight.last_contact * 1000).toUTCString().slice(17, 25)} UTC`
@@ -99,6 +105,8 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, paddingTop: 2 }}>
           <button
+            type="button"
+            aria-label={`Close details for ${flightNum || callsign}`}
             onClick={onClose}
             style={{
               background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5,
@@ -135,7 +143,11 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         }}>
           <div style={{ flexShrink: 0 }}>
             {photo
-              ? <img src={photo} alt="" style={{ width: 120, height: 80, objectFit: 'cover', border: '1px solid var(--border)', borderRadius: 6, background: 'rgba(255,255,255,0.04)' }} />
+              ? <img
+                  src={photo}
+                  alt={`${flightNum || callsign} aircraft photo`}
+                  style={{ width: 120, height: 80, objectFit: 'cover', border: '1px solid var(--border)', borderRadius: 6, background: 'rgba(255,255,255,0.04)' }}
+                />
               : <AircraftSilhouette typeCode={typeCode} size={100} />
             }
           </div>
@@ -289,6 +301,10 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         {/* ── Flight path ───────────────────────────── */}
         <div style={{ padding: '14px 22px 24px' }}>
           <button
+            type="button"
+            aria-expanded={showPath}
+            aria-controls="flight-path-panel"
+            aria-label={`${showPath ? 'Hide' : 'Show'} historical path for ${flightNum || callsign}`}
             onClick={() => setShowPath(v => !v)}
             style={{
               width: '100%', background: 'none', border: 'none',
@@ -309,21 +325,23 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
             </span>
             <span style={{ fontSize: 13, display: 'inline-block', transform: showPath ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
           </button>
-          {showPath && track && (
-            <div style={{ marginTop: 14, animation: 'fade-in 0.2s ease' }}>
-              <FlightPath track={track} currentAlt={flight.baro_altitude} />
-            </div>
-          )}
-          {showPath && !track && loading && (
-            <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-              Fetching path data…
-            </div>
-          )}
-          {showPath && !track && !loading && (
-            <div style={{ marginTop: 14, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-              No path data available
-            </div>
-          )}
+          <div id="flight-path-panel" style={{ marginTop: 14, display: showPath ? 'block' : 'none' }}>
+            {showPath && track && (
+              <div style={{ animation: 'fade-in 0.2s ease' }}>
+                <FlightPath track={track} currentAlt={flight.baro_altitude} />
+              </div>
+            )}
+            {showPath && !track && loading && (
+              <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+                Fetching path data…
+              </div>
+            )}
+            {showPath && !track && !loading && (
+              <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+                No path data available
+              </div>
+            )}
+          </div>
         </div>
 
       </div>

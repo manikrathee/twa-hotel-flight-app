@@ -99,8 +99,9 @@ async function enrichFlights(raw) {
   return candidates
     .filter(f => {
       const callsign = normalizeCallsign(f.callsign)
-      if (!callsign) return false
+      if (!callsign) return true
       const route = routeByCallsign.get(callsign)
+      if (!route) return true
       return routeTouchesJfk(route)
     })
     .sort((a, b) => a.distKm - b.distKm)
