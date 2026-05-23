@@ -114,17 +114,6 @@ export default function App() {
   const handleRunwayAlertDismiss = useCallback(() => setRunwayAlert(null), [])
 
   useEffect(() => {
-    if (!runwayAlert) return
-    if (!runwayAlert.flightId || !runwayAlert.flightLabel) {
-      setRunwayAlert(null)
-      return
-    }
-    if (!flights.some(f => f.icao24 === runwayAlert.flightId)) {
-      setRunwayAlert(null)
-    }
-  }, [flights, runwayAlert])
-
-  useEffect(() => {
     const onGlobalKeyDown = (event) => {
       if (event.key === 'Escape' && effectiveSelectedId) {
         event.preventDefault()
