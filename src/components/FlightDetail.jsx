@@ -450,6 +450,8 @@ function clamp01(value) {
   if (value < 0) return 0
   if (value > 1) return 1
   return value
+}
+
 function resolveTypeCode(aircraftInfo) {
   const typeLike = aircraftInfo?.type || aircraftInfo?.icao_type || aircraftInfo?.typecode || aircraftInfo?.type_code || aircraftInfo?.typeCode
   return cleanText(typeLike)?.toUpperCase() || null
