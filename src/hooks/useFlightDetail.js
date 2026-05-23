@@ -69,6 +69,13 @@ function mergeAircraftProfiles(base = null, meta = null) {
   }
 }
 
+function isPlaceholderText(value) {
+  if (!value && value !== 0) return false
+  const clean = String(value).trim()
+  if (!clean) return true
+  return /^(unknown|n\/a|na|none|not available|tbd|operator pending|registration pending)$/i.test(clean)
+}
+
 function hasUsableAircraftProfile(profile) {
   if (!profile) return false
   return Boolean(
@@ -82,9 +89,7 @@ function hasUsableAircraftProfile(profile) {
 
 function isUsableText(value) {
   if (!value && value !== 0) return false
-  const clean = String(value).trim()
-  if (!clean) return false
-  return !/^(unknown|n\/a|na|none|not available|tbd)$/i.test(clean)
+  return !isPlaceholderText(value)
 }
 
 export default function useFlightDetail(flight, preloadedTrack = null) {

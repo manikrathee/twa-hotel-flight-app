@@ -37,7 +37,7 @@ export default function FlightDetail({
   const typeCode = resolveTypeCode(aircraftInfo)
   const aircraftFacts = getAircraftFacts(typeCode)
   const airlineFacts = getAirlineFacts(callsign, route?.airline)
-  const manufacturer = cleanText(aircraftInfo?.manufacturer) || aircraftFacts?.maker || 'Operator fleet'
+  const manufacturer = cleanText(aircraftInfo?.manufacturer) || aircraftFacts?.maker
   const model = resolveModel({
     flightNum,
     manufacturer,
@@ -46,8 +46,9 @@ export default function FlightDetail({
     facts: aircraftFacts,
     route
   })
-  const displayModel = model || 'Operator-assigned platform profile'
-  const registration = cleanText(aircraftInfo?.registration) || 'Registration pending'
+  const displayModel = model
+  const registration = cleanText(aircraftInfo?.registration)
+  const photo = cleanText(aircraftInfo?.url_photo_thumbnail) || cleanText(aircraftInfo?.url_photo)
   const owner = cleanText(aircraftInfo?.registered_owner)
 
   const altFt      = metersToFeet(flight.baro_altitude)
@@ -198,9 +199,11 @@ export default function FlightDetail({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600, letterSpacing: 0.2 }}>AIRCRAFT</div>
-            <div style={{ fontSize: 15, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
-              {loading && !displayModel ? '...' : displayModel}
-            </div>
+            {displayModel && (
+              <div style={{ fontSize: 15, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
+                {displayModel}
+              </div>
+            )}
             {registration && (
               <div style={{ fontSize: 13, color: 'var(--cyan)', marginTop: 5, fontWeight: 600 }}>
                 {registration}
@@ -569,7 +572,7 @@ function cleanText(value) {
   if (!value && value !== 0) return null
   const clean = String(value).trim()
   if (!clean) return null
-  if (/^(unknown|n\/a|na|none|not available|tbd)$/i.test(clean)) return null
+  if (/^(unknown|n\/a|na|none|not available|tbd|operator pending|registration pending)$/i.test(clean)) return null
   return clean
 }
 
