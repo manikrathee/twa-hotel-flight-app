@@ -25,6 +25,7 @@ function clampPanelSize(value, minimum, maximum) {
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [track, setTrack] = useState(null)
+  const [runwayAlert, setRunwayAlert] = useState(null)
   const [viewportWidth, setViewportWidth] = useState(() => {
     if (typeof window === 'undefined') return 1360
     return window.innerWidth
@@ -69,18 +70,59 @@ export default function App() {
 
   const detailRefreshMs = selectedFlight ? 1000 : pollMs
 
+  const activateFlight = useCallback((icao24) => {
+    if (!icao24) return
+    setSelectedId(icao24)
+    setTrack(null)
+    setRunwayAlert(null)
+  }, [])
+
   const handleSelect = useCallback((icao24) => {
     setSelectedId(prev => {
       if (prev === icao24) { setTrack(null); return null }
       setTrack(null)
       return icao24
     })
+    setRunwayAlert(null)
   }, [])
 
   const handleClose = useCallback(() => {
     setSelectedId(null)
     setTrack(null)
+    setRunwayAlert(null)
   }, [])
+
+  const handleRunwaySelection = useCallback((payload) => {
+    if (!payload?.flightId) {
+      setRunwayAlert(null)
+      return
+    }
+
+    setRunwayAlert({
+      runwayId: payload.runwayId ?? payload.runwayLabel ?? 'Runway',
+      runwayLabel: payload.runwayLabel ?? payload.runwayId ?? 'Runway',
+      flightId: payload.flightId,
+      flightLabel: payload.flightLabel || payload.flightId,
+    })
+  }, [])
+
+  const handleRunwayAlertClick = useCallback(() => {
+    if (!runwayAlert?.flightId) return
+    activateFlight(runwayAlert.flightId)
+  }, [activateFlight, runwayAlert])
+
+  const handleRunwayAlertDismiss = useCallback(() => setRunwayAlert(null), [])
+
+  useEffect(() => {
+    if (!runwayAlert) return
+    if (!runwayAlert.flightId || !runwayAlert.flightLabel) {
+      setRunwayAlert(null)
+      return
+    }
+    if (!flights.some(f => f.icao24 === runwayAlert.flightId)) {
+      setRunwayAlert(null)
+    }
+  }, [flights, runwayAlert])
 
   useEffect(() => {
     const onGlobalKeyDown = (event) => {
@@ -183,9 +225,70 @@ export default function App() {
             flights={flights}
             selectedFlight={selectedFlight}
             onSelect={handleSelect}
+            onRunwaySelect={handleRunwaySelection}
             track={selectedFlight ? track : null}
             detailPanelWidth={selectedFlight ? detailWidth : 0}
           />
+          {runwayAlert && (
+            <div style={{
+              position: 'absolute',
+              top: 72,
+              left: 16,
+              zIndex: 20,
+              background: 'var(--panel-overlay-soft)',
+              border: '1px solid rgba(var(--cyan-alt-rgb), 0.35)',
+              borderRadius: 7,
+              padding: '10px 12px',
+              maxWidth: 420,
+              backdropFilter: 'blur(12px)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}>
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'rgba(var(--cyan-alt-rgb), 0.75)', letterSpacing: 1.8 }}>
+                {runwayAlert.runwayLabel}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.5 }}>
+                inbound:
+              </span>
+              <button
+                type="button"
+                onClick={handleRunwayAlertClick}
+                style={{
+                  background: 'rgba(var(--cyan-alt-rgb), 0.1)',
+                  color: 'var(--cyan-alt)',
+                  border: '1px solid rgba(var(--cyan-alt-rgb), 0.5)',
+                  borderRadius: 4,
+                  padding: '4px 9px',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 11,
+                  letterSpacing: 1,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {runwayAlert.flightLabel}
+              </button>
+              <button
+                type="button"
+                onClick={handleRunwayAlertDismiss}
+                aria-label="Dismiss runway arrival notification"
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 4,
+                  border: '1px solid rgba(var(--text-soft-rgb), 0.35)',
+                  background: 'rgba(var(--text-soft-rgb), 0.06)',
+                  color: 'var(--text-dim)',
+                  fontFamily: 'var(--font-display)',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Detail panel: absolute overlay, slides in/out via CSS — map never reflows */}
