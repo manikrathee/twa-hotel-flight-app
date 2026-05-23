@@ -8,25 +8,77 @@
 
 :root {
   --bg: #070c14;
+  --bg-surface: #121b2b;
   --panel: rgba(11, 18, 28, 0.84);
+  --panel-soft: rgba(8, 13, 20, 0.92);
+  --panel-strong: rgba(8, 13, 20, 0.98);
+  --panel-overlay: rgba(3, 3, 12, 0.92);
+  --panel-overlay-soft: rgba(4, 4, 16, 0.94);
   --panel-hover: rgba(14, 23, 36, 0.92);
+  --panel-chart: rgba(5, 12, 18, 0.78);
+  --panel-border: rgba(255, 255, 255, 0.04);
+  --panel-divider: rgba(255, 255, 255, 0.08);
+  --panel-subtle: rgba(255, 255, 255, 0.12);
+  --panel-line: rgba(255, 255, 255, 0.03);
   --border: rgba(129, 162, 189, 0.22);
   --border-bright: rgba(112, 201, 227, 0.45);
   --cyan: #70c9e3;
+  --cyan-alt: #00c3ff;
+  --cyan-rgb: 112, 201, 227;
+  --cyan-alt-rgb: 0, 195, 255;
   --cyan-glow: rgba(112, 201, 227, 0.16);
   --cyan-dim: rgba(112, 201, 227, 0.62);
   --red: #ec5f67;
+  --red-alt: #e31e26;
+  --red-alt-rgb: 227, 30, 38;
   --red-dim: rgba(236, 95, 103, 0.82);
   --amber: #f3be7c;
+  --amber-rgb: 243, 190, 124;
   --green: #8ccf7e;
   --text: #d2d9e1;
   --text-dim: #8a99ab;
   --heading: #eef2f7;
+  --text-soft-rgb: 84, 96, 112;
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 8px;
   --radius-lg: 12px;
+}
+
+[data-theme='light'] {
+  --bg: #f3f6fc;
+  --bg-surface: #e9eef6;
+  --panel: rgba(251, 253, 255, 0.94);
+  --panel-soft: rgba(243, 248, 254, 0.92);
+  --panel-strong: rgba(255, 255, 255, 0.98);
+  --panel-overlay: rgba(255, 255, 255, 0.9);
+  --panel-overlay-soft: rgba(248, 250, 255, 0.95);
+  --panel-hover: rgba(241, 246, 252, 0.92);
+  --panel-chart: rgba(239, 244, 252, 0.85);
+  --panel-border: rgba(12, 32, 64, 0.12);
+  --panel-divider: rgba(12, 32, 64, 0.15);
+  --panel-subtle: rgba(12, 32, 64, 0.16);
+  --panel-line: rgba(12, 32, 64, 0.06);
+  --border: rgba(17, 44, 75, 0.2);
+  --border-bright: rgba(0, 112, 175, 0.4);
+  --cyan: #0d4d7a;
+  --cyan-alt: #0077b6;
+  --cyan-rgb: 13, 77, 122;
+  --cyan-alt-rgb: 0, 119, 182;
+  --cyan-glow: rgba(13, 77, 122, 0.16);
+  --cyan-dim: rgba(13, 77, 122, 0.62);
+  --red: #9d3643;
+  --red-alt: #a81f2b;
+  --red-alt-rgb: 168, 31, 43;
+  --red-dim: rgba(157, 54, 67, 0.82);
+  --amber: #ab6f1f;
+  --amber-rgb: 171, 111, 31;
+  --green: #2e7d32;
+  --text: #10233f;
+  --text-dim: #4f607f;
+  --heading: #082040;
+  --text-soft-rgb: 90, 104, 129;
 }
 
 html, body, #root {
@@ -35,7 +87,7 @@ html, body, #root {
 }
 
 body {
-  background: radial-gradient(circle at 20% 8%, #121b2b 0%, #070c14 55%);
+  background: radial-gradient(circle at 20% 8%, var(--bg-surface) 0%, var(--bg) 55%);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: 13px;
@@ -49,8 +101,8 @@ body::after {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 70% 30%, rgba(112, 201, 227, 0.08), transparent 45%),
-    radial-gradient(circle at 18% 80%, rgba(236, 95, 103, 0.07), transparent 40%);
+    radial-gradient(circle at 70% 30%, rgba(var(--cyan-rgb), 0.08), transparent 45%),
+    radial-gradient(circle at 18% 80%, rgba(var(--red-alt-rgb), 0.07), transparent 40%);
   z-index: 1;
 }
 
@@ -63,8 +115,8 @@ body::before {
     90deg,
     transparent,
     transparent 6px,
-    rgba(255, 255, 255, 0.012) 6px,
-    rgba(255, 255, 255, 0.012) 7px
+    rgba(var(--cyan-rgb), 0.012) 6px,
+    rgba(var(--cyan-rgb), 0.012) 7px
   );
   z-index: 2;
 }
@@ -72,7 +124,7 @@ body::before {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(132, 159, 187, 0.35);
+  background: rgba(var(--text-soft-rgb), 0.35);
   border-radius: 8px;
 }
 
@@ -86,7 +138,7 @@ body::before {
 }
 
 .hudbar {
-  background: linear-gradient(180deg, rgba(11, 18, 28, 0.94), rgba(11, 18, 28, 0.86));
+  background: linear-gradient(180deg, var(--panel-soft), var(--panel));
   border-bottom: 1px solid var(--border);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
   display: grid;
@@ -155,11 +207,11 @@ body::before {
 
 .plane-popup .maplibregl-popup-content,
 .twa-popup .maplibregl-popup-content {
-  background: rgba(7, 15, 22, 0.94) !important;
-  border: 1px solid rgba(112, 201, 227, 0.35) !important;
+  background: var(--panel-overlay-soft) !important;
+  border: 1px solid rgba(var(--cyan-rgb), 0.35) !important;
   border-radius: 8px !important;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35) !important;
-  color: rgba(212, 228, 242, 0.95) !important;
+  color: var(--text) !important;
   font-family: var(--font-ui) !important;
   font-size: 12px !important;
   padding: 5px 10px !important;
@@ -167,7 +219,7 @@ body::before {
 
 .plane-popup .maplibregl-popup-tip,
 .twa-popup .maplibregl-popup-tip {
-  border-top-color: rgba(112, 201, 227, 0.35) !important;
+  border-top-color: rgba(var(--cyan-rgb), 0.35) !important;
 }
 
 @keyframes pulse-dot {
@@ -200,6 +252,6 @@ body::before {
 }
 
 @keyframes selected-glow {
-  0% { box-shadow: inset 0 0 0 1px rgba(112, 201, 227, 0.12), 0 0 0 rgba(112, 201, 227, 0); }
-  100% { box-shadow: inset 0 0 0 1px rgba(112, 201, 227, 0.22), 0 0 18px rgba(112, 201, 227, 0.14); }
+  0% { box-shadow: inset 0 0 0 1px rgba(var(--cyan-rgb), 0.12), 0 0 0 rgba(var(--cyan-rgb), 0); }
+  100% { box-shadow: inset 0 0 0 1px rgba(var(--cyan-rgb), 0.22), 0 0 18px rgba(var(--cyan-rgb), 0.14); }
 }

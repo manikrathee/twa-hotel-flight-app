@@ -12,9 +12,9 @@ function ZoneHeader({ label, count, color, sublabel }) {
     <div style={{
       padding: '8px 16px 6px 16px',
       display: 'flex', alignItems: 'center', gap: 10,
-      borderBottom: '1px solid rgba(255,255,255,0.04)',
-      borderTop: '1px solid rgba(255,255,255,0.04)',
-      background: 'rgba(8,13,20,0.9)',
+      borderBottom: '1px solid var(--panel-line)',
+      borderTop: '1px solid var(--panel-line)',
+      background: 'var(--panel-soft)',
       flexShrink: 0,
     }}>
       <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0 }} />
@@ -57,20 +57,20 @@ export default function NearbyList({ flights, selectedId, onSelect, width }) {
       {/* Header */}
       <div style={{
         padding: '14px 16px 12px',
-        borderBottom: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
-        background: 'rgba(8,13,20,0.92)',
+        background: 'var(--panel-strong)',
       }}>
         <div style={{ fontSize: 14, color: 'var(--heading)', fontWeight: 700 }}>
           NEARBY TRAFFIC
         </div>
         <div style={{
           fontSize: 13, color: 'var(--cyan)',
-          background: 'rgba(0,212,200,0.1)', padding: '2px 9px', borderRadius: 999,
-          border: '1px solid rgba(0,212,200,0.2)',
+          background: 'rgba(var(--cyan-alt-rgb), 0.14)', padding: '2px 9px', borderRadius: 999,
+          border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
           fontWeight: 600,
         }}>
           {deferredFlights.length}
@@ -83,7 +83,7 @@ export default function NearbyList({ flights, selectedId, onSelect, width }) {
         gridTemplateColumns: '1fr 68px 74px',
         gap: 0,
         padding: '8px 16px 8px 18px',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderBottom: '1px solid var(--panel-line)',
         flexShrink: 0,
       }}>
         {['CALLSIGN', 'ALT', 'SPD'].map(h => (
@@ -122,7 +122,7 @@ export default function NearbyList({ flights, selectedId, onSelect, width }) {
             <ZoneHeader
               label="ENROUTE"
               count={enrouteAll.length > MAX_ENROUTE ? `${MAX_ENROUTE}/${enrouteAll.length}` : enroute.length}
-              color="rgba(255,255,255,0.28)"
+              color="rgba(var(--text-soft-rgb), 0.45)"
               sublabel="> 30mi"
             />
             {enroute.map(f => (
@@ -142,19 +142,19 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   const spd = flight.velocity ? msToKnots(flight.velocity) : '—'
   const vr = flight.vertical_rate || 0
   const vrIndicator = vr > 1 ? '↑' : vr < -1 ? '↓' : '—'
-  const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? '#e05a3a' : 'var(--text-dim)'
+  const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? 'var(--red-alt)' : 'var(--text-dim)'
   const distMi = Math.round(flight.distKm * 0.621)
-  const accentColor = distMi <= 5 ? 'var(--amber)' : distMi <= 20 ? 'var(--cyan)' : 'rgba(255,255,255,0.1)'
+  const accentColor = distMi <= 5 ? 'var(--amber)' : distMi <= 20 ? 'var(--cyan)' : 'var(--panel-subtle)'
 
   return (
     <button
       onClick={() => onSelect(flight.icao24)}
       style={{
         width: '100%',
-        background: selected ? 'rgba(0,212,200,0.08)' : 'transparent',
+        background: selected ? 'rgba(var(--cyan-alt-rgb), 0.08)' : 'transparent',
         border: 'none',
-        borderLeft: `2px solid ${selected ? 'var(--cyan)' : accentColor}`,
-        borderBottom: '1px solid rgba(255,255,255,0.03)',
+        borderLeft: `2px solid ${selected ? 'var(--cyan-alt)' : accentColor}`,
+        borderBottom: '1px solid var(--panel-line)',
         padding: '10px 14px 10px 16px',
         cursor: 'pointer',
         display: 'grid',
@@ -164,10 +164,10 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
         textAlign: 'left',
         transition: 'background 0.18s, transform 0.18s, box-shadow 0.18s',
         transform: selected ? 'translateX(2px)' : 'none',
-        boxShadow: selected ? 'inset 0 0 0 1px rgba(0,212,200,0.22), 0 0 18px rgba(0,212,200,0.14)' : 'none',
+        boxShadow: selected ? 'inset 0 0 0 1px rgba(var(--cyan-alt-rgb), 0.22), 0 0 18px rgba(var(--cyan-alt-rgb), 0.14)' : 'none',
         animation: selected ? 'selected-glow 0.35s ease' : 'none',
       }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'rgba(var(--text-soft-rgb), 0.06)' }}
       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent' }}
     >
       <div>
@@ -181,7 +181,7 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
           {airline ? airline.replace(' Airlines', '').replace(' Airways', '') : flight.origin_country}
-          <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 7px' }}>·</span>
+          <span style={{ color: 'rgba(var(--text-soft-rgb), 0.35)', margin: '0 7px' }}>·</span>
           <span style={{ color: distMi <= 5 ? 'var(--amber)' : 'var(--text-dim)' }}>{distMi}mi</span>
         </div>
       </div>

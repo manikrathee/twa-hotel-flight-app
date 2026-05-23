@@ -75,7 +75,7 @@ export default function FlightPath({ track }) {
         border: '1px solid var(--border)',
         borderRadius: 8,
         overflow: 'hidden',
-        background: 'rgba(5,12,18,0.78)',
+        background: 'var(--panel-chart)',
       }}>
         <svg
           width="100%"
@@ -92,14 +92,14 @@ export default function FlightPath({ track }) {
           {/* Background grid */}
           {[0.25, 0.5, 0.75].map(f => (
             <line key={f} x1="0" y1={H * (1 - f)} x2={W} y2={H * (1 - f)}
-              stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+              stroke="rgba(var(--text-soft-rgb), 0.12)" strokeWidth="1" />
           ))}
 
           {/* Fill */}
           <defs>
             <linearGradient id="altFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00c3ff" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#00c3ff" stopOpacity="0.02" />
+              <stop offset="0%" style={{ stopColor: 'var(--cyan-alt)', stopOpacity: 0.25 }} />
+              <stop offset="100%" style={{ stopColor: 'var(--cyan-alt)', stopOpacity: 0.02 }} />
             </linearGradient>
           </defs>
           <polygon points={fillPoints} fill="url(#altFill)" />
@@ -108,7 +108,7 @@ export default function FlightPath({ track }) {
           <polyline
             points={svgPoints}
             fill="none"
-            stroke="#00c3ff"
+            stroke="var(--cyan-alt)"
             strokeWidth="1.5"
             strokeLinejoin="round"
             style={{
@@ -125,8 +125,8 @@ export default function FlightPath({ track }) {
             const y = H - ((altitudes[hoverIdx] - minAlt) / (maxAlt - minAlt)) * H
             return (
               <g>
-                <line x1={x} y1="0" x2={x} y2={H} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-                <circle cx={x} cy={y} r="3" fill="#00c3ff" />
+                <line x1={x} y1="0" x2={x} y2={H} stroke="rgba(var(--text-soft-rgb), 0.22)" strokeWidth="1" />
+                <circle cx={x} cy={y} r="3" fill="var(--cyan-alt)" />
               </g>
             )
           })()}
