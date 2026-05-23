@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import useFlightDetail from '../hooks/useFlightDetail'
 import AircraftSilhouette from './AircraftSilhouette'
 import FlightPath from './FlightPath'
@@ -79,6 +79,33 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
                    : squawk === '7600' ? '⚠ RADIO FAIL'
                    : squawk === '7500' ? '⚠ HIJACK'
                    : squawk
+
+  const routePathProgress = useMemo(() => {
+    if (!origin || !dest) return null
+    if (flight.latitude == null || flight.longitude == null) return null
+    const remainingMi = Math.round(distanceMiles(flight.latitude, flight.longitude, dest.latitude, dest.longitude))
+    if (!routeMiles || !Number.isFinite(routeMiles)) {
+      return { remainingMi, flownMi: null, progress: null }
+    }
+    const flownMi = Math.round(distanceMiles(origin.latitude, origin.longitude, flight.latitude, flight.longitude))
+    const progress = Math.round(clamp01(flownMi / routeMiles) * 100)
+    return { remainingMi, flownMi, progress }
+  }, [origin, dest, routeMiles, flight.latitude, flight.longitude])
+
+  const overflyCountries = useMemo(() => {
+    const list = []
+    const append = (value) => {
+      const country = String(value || '').trim()
+      if (!country) return
+      if (!list.includes(country)) list.push(country)
+    }
+    append(origin?.country)
+    append(origin?.country_iso)
+    append(flight.origin_country)
+    append(dest?.country)
+    append(dest?.country_iso)
+    return list
+  }, [origin, dest, flight.origin_country])
 
   // Flight phase
   const isClimbing   = vrFpm > 200
@@ -252,23 +279,54 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
                     {routeMiles.toLocaleString()} mi
                   </span>
                 )}
+                {routePathProgress && routePathProgress.progress !== null && (
+                  <span style={{ fontSize: 12, color: 'rgba(var(--cyan-alt-rgb), 0.65)', letterSpacing: 0.1 }}>
+                    {routePathProgress.progress}% complete · {routePathProgress.remainingMi.toLocaleString()} mi to destination
+                  </span>
+                )}
+                {routePathProgress && routePathProgress.progress === null && (
+                  <span style={{ fontSize: 12, color: 'rgba(var(--cyan-alt-rgb), 0.65)', letterSpacing: 0.1 }}>
+                    {routePathProgress.remainingMi.toLocaleString()} mi to destination
+                  </span>
+                )}
               </div>
               <AirportBadge airport={dest} />
             </div>
+            {(route?.airline || Number.isFinite(routePathProgress?.flownMi)) && (
+              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {route?.airline && (
+                  <MiniKV
+                    label="AIRLINE"
+                    value={`${route.airline.name}${route.airline.iata || route.airline.icao ? ` (${[route.airline.iata, route.airline.icao].filter(Boolean).join('/')})` : ''}`}
+                  />
+                )}
+                {Number.isFinite(routePathProgress?.flownMi) && <MiniKV label="FLYED" value={`${routePathProgress.flownMi.toLocaleString()} mi`} />}
+              </div>
+            )}
+            {overflyCountries.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.2, marginBottom: 6 }}>COUNTRIES ALONG PATH</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                  {overflyCountries.map(country => (
+                    <span key={country} style={{
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      fontSize: 11,
+                      background: 'rgba(var(--cyan-alt-rgb), 0.12)',
+                      border: '1px solid rgba(var(--cyan-alt-rgb), 0.34)',
+                      color: 'var(--text)',
+                      letterSpacing: 0.1,
+                    }}>
+                      {country}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {(origin?.elevation_ft || dest?.elevation_ft) && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
                 {origin?.elevation_ft && <MiniKV label={`${origin.iata_code || '—'} elevation`} value={`${Number(origin.elevation_ft).toLocaleString()} ft`} />}
                 {dest?.elevation_ft && <MiniKV label={`${dest.iata_code || '—'} elevation`} value={`${Number(dest.elevation_ft).toLocaleString()} ft`} />}
-              </div>
-            )}
-            {route?.airline && (
-              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-dim)' }}>
-                {route.airline.name}
-                {(route.airline.iata || route.airline.icao) && (
-                  <span style={{ marginLeft: 8, fontSize: 12, color: 'rgba(var(--cyan-alt-rgb), 0.55)', fontWeight: 600 }}>
-                    {[route.airline.iata, route.airline.icao].filter(Boolean).join(' / ')}
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -349,7 +407,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
           <div id="flight-path-panel" style={{ marginTop: 14, display: showPath ? 'block' : 'none' }}>
             {showPath && track && (
               <div style={{ animation: 'fade-in 0.2s ease' }}>
-                <FlightPath track={track} currentAlt={flight.baro_altitude} />
+                <FlightPath track={track} route={route} />
               </div>
             )}
             {showPath && !track && loading && (
@@ -379,6 +437,11 @@ function routeDistanceMiles(origin, dest) {
   return Math.round(distanceMiles(vals[0], vals[1], vals[2], vals[3]))
 }
 
+function clamp01(value) {
+  if (!Number.isFinite(value)) return 0
+  if (value < 0) return 0
+  if (value > 1) return 1
+  return value
 function resolveTypeCode(aircraftInfo) {
   const typeLike = aircraftInfo?.type || aircraftInfo?.icao_type || aircraftInfo?.typecode || aircraftInfo?.type_code || aircraftInfo?.typeCode
   return cleanText(typeLike)?.toUpperCase() || null
