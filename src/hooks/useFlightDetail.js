@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from 'react'
-import { fetchTrack } from '../api/opensky'
+import { fetchAircraftMeta, fetchTrack } from '../api/opensky'
 import { fetchCallsignRoute, fetchAircraftInfo } from '../api/adsbdb'
 import { flightCache } from '../cache/flightCache'
 
@@ -29,6 +29,63 @@ function detailReducer(state, action) {
   }
 }
 
+function normalizeMetadata(meta) {
+  if (!meta) return null
+  const source = meta.aircraft || meta
+  return {
+    manufacturer: source.manufacturer || source.manufacturername || null,
+    model: source.model || null,
+    type: source.type || source.typecode || source.icao_type || null,
+    registration: source.registration || null,
+    registered_owner: source.registered_owner || source.owner || source.operator || null,
+    url_photo: source.url_photo || null,
+    url_photo_thumbnail: source.url_photo_thumbnail || null,
+    serial_number: source.serial_number || null,
+    age: source.age || null,
+  }
+}
+
+function mergeAircraftProfiles(base = null, meta = null) {
+  const normalizedMeta = normalizeMetadata(meta)
+  const profile = {
+    ...(base || {}),
+    ...(normalizedMeta || {}),
+  }
+
+  const toCleanText = (value) => isUsableText(value) ? value : null
+  return {
+    ...profile,
+    type: toCleanText(profile.type) || toCleanText(profile.icao_type),
+    icao_type: toCleanText(profile.icao_type),
+    manufacturer: toCleanText(profile.manufacturer),
+    model: toCleanText(profile.model),
+    registered_owner: toCleanText(profile.registered_owner),
+    registration: toCleanText(profile.registration),
+    url_photo_thumbnail: toCleanText(profile.url_photo_thumbnail),
+    url_photo: toCleanText(profile.url_photo),
+    age: toCleanText(profile.age),
+    serial_number: toCleanText(profile.serial_number),
+  }
+}
+
+function hasUsableAircraftProfile(profile) {
+  if (!profile) return false
+  return Boolean(
+    isUsableText(profile.type) ||
+    isUsableText(profile.icao_type) ||
+    isUsableText(profile.model) ||
+    isUsableText(profile.manufacturer) ||
+    isUsableText(profile.registration)
+  )
+}
+
+function isUsableText(value) {
+  if (!value && value !== 0) return false
+  const clean = String(value).trim()
+  if (!clean) return false
+  return !/^(unknown|n\/a|na|none|not available|tbd)$/i.test(clean)
+}
+
 export default function useFlightDetail(flight) {
   const [state, dispatch] = useReducer(detailReducer, null, initialDetailState)
   const icao24 = flight?.icao24
@@ -52,7 +109,7 @@ export default function useFlightDetail(flight) {
     if (cachedAircraft) dispatch({ type: 'setAircraftInfo', value: cachedAircraft })
 
     const needsTrack = !cachedTrack
-    const needsAircraft = !cachedAircraft
+    const needsAircraft = !hasUsableAircraftProfile(cachedAircraft)
 
     if (!needsTrack && !needsAircraft) {
       // Both from cache — still fetch route in background
@@ -84,15 +141,20 @@ export default function useFlightDetail(flight) {
       }
 
       if (needsAircraft) {
-        tasks.push(
-          fetchAircraftInfo(icao24)
-            .then(d => {
-              if (ignored) return
-              if (d) flightCache.setAircraft(icao24, d)
-              dispatch({ type: 'setAircraftInfo', value: d })
-            })
-            .catch(() => { if (!ignored) dispatch({ type: 'setAircraftInfo', value: null }) })
-        )
+        tasks.push((async () => {
+          const [aircraft, metadata] = await Promise.all([
+            fetchAircraftInfo(icao24, callsign).catch(() => null),
+            fetchAircraftMeta(icao24, signal).catch(() => null),
+          ])
+
+          if (ignored) return
+
+          const merged = mergeAircraftProfiles(aircraft, metadata)
+          if (hasUsableAircraftProfile(merged)) {
+            flightCache.setAircraft(icao24, merged)
+          }
+          dispatch({ type: 'setAircraftInfo', value: hasUsableAircraftProfile(merged) ? merged : null })
+        })())
       }
 
       tasks.push(
