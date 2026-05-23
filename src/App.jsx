@@ -22,6 +22,8 @@ export default function App() {
   const [detailWidth, setDetailWidth] = useState(560)
   const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs } = useFlights(selectedId)
   const { weather } = useWeather()
+  const hasFlights = flights.length > 0
+  const isInitialLoad = loading && !hasFlights
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
 
@@ -54,27 +56,32 @@ export default function App() {
           onListWidthChange={v => setListWidth(clamp(v, LIST_PANEL_MIN, LIST_PANEL_MAX))}
           onDetailWidthChange={v => setDetailWidth(clamp(v, DETAIL_PANEL_MIN, DETAIL_PANEL_MAX))}
         />
-        <div style={{
+      <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-          <div style={{
-            width: 58, height: 58, borderRadius: '50%',
-            border: '1px solid rgba(227,30,38,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 24px rgba(227,30,38,0.12)',
-            marginBottom: 6,
-          }}>
-            <span style={{ fontSize: 24, color: 'var(--red)' }}>⚠</span>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--heading)', letterSpacing: 0.2 }}>
-            NO ADS-B FEED
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1 }}>{error}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', opacity: 0.8, marginTop: 2 }}>
-            Retrying automatically every 15 seconds
-          </div>
+        <div style={{
+          width: 58, height: 58, borderRadius: '50%',
+          border: '1px solid rgba(var(--red-alt-rgb), 0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 24px rgba(var(--red-alt-rgb), 0.18)',
+          marginBottom: 6,
+        }}>
+          <span style={{ fontSize: 24, color: 'var(--red)' }}>⚠</span>
         </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--heading)', letterSpacing: 0.2 }}>
+          NO ADS-B FEED
+        </div>
+        <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1 }}>
+          ADS-B FEED UNAVAILABLE
+        </div>
+        <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1, textAlign: 'center' }}>
+          {error}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', opacity: 0.8, marginTop: 2 }}>
+          Retrying automatically every 15 seconds
+        </div>
+      </div>
       </div>
     )
   }
@@ -102,6 +109,8 @@ export default function App() {
           selectedId={selectedId}
           onSelect={handleSelect}
           width={listWidth}
+          loading={loading}
+          error={error}
         />
 
         {/* Map always fills remaining space — NEVER resizes when panel opens */}
@@ -132,9 +141,9 @@ export default function App() {
         </div>
       </div>
 
-      {loading && flights.length === 0 && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(3,3,12,0.92)',
+      {isInitialLoad && (
+        <div role="status" aria-live="polite" style={{
+          position: 'fixed', inset: 0, background: 'var(--panel-overlay)',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center', gap: 16, zIndex: 9000,
           backdropFilter: 'blur(6px)',
@@ -164,7 +173,7 @@ function RadarLoader() {
       <svg width="96" height="96" viewBox="0 0 96 96">
         {[18, 30, 42].map(r => (
           <circle key={r} cx="48" cy="48" r={r} fill="none"
-            stroke="rgba(0,195,255,0.15)" strokeWidth="1.5" />
+            stroke="rgba(var(--cyan-alt-rgb), 0.15)" strokeWidth="1.5" />
         ))}
         <line x1="48" y1="48" x2="48" y2="8" stroke="var(--cyan)" strokeWidth="2.5" opacity="0.8"
           style={{ transformOrigin: '48px 48px', animation: 'radar-spin 2s linear infinite' }} />
