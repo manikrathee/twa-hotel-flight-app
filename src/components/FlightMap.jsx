@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { INITIAL_VIEW, JFK_RUNWAYS, MAP_STYLE, RUNWAY_LABELS, TWA_HOTEL } from './flightMapConfig'
 import { buildPlaneFeatures, buildPlaneSourceDiff, createPlaneImageData, getTrackCoordinates } from './flightMapHelpers'
+import { bearingDeg, distanceKm } from '../utils/geo'
 
 const FALLBACK_THEME = {
   cyanRgb: '112, 201, 227',
@@ -17,6 +18,101 @@ function resolveThemeRGB(cssVar, fallback) {
   return value || fallback
 }
 
+const RUNWAY_INCOMING = {
+  maxLineDistanceKm: 1.55,
+  maxEndpointDistanceKm: 4,
+  headingToleranceDeg: 40,
+  maxAltitudeM: 7000,
+  minSpeedMs: 20,
+}
+
+function toRadians(deg) {
+  return (deg * Math.PI) / 180
+}
+
+function angularDiff(a, b) {
+  return Math.abs(((a - b + 540) % 360) - 180)
+}
+
+function distanceToSegmentKm(lat, lon, start, end) {
+  const [startLon, startLat] = start
+  const [endLon, endLat] = end
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return Infinity
+  const refLat = (lat + startLat + endLat) / 3
+  const cosRefLat = Math.cos(toRadians(refLat))
+
+  const x0 = (lon - startLon) * 111_320 * cosRefLat
+  const y0 = (lat - startLat) * 111_132
+  const x1 = (endLon - startLon) * 111_320 * cosRefLat
+  const y1 = (endLat - startLat) * 111_132
+
+  const len2 = (x1 * x1) + (y1 * y1)
+  if (!Number.isFinite(len2) || len2 === 0) return Math.hypot(x0, y0) / 1000
+
+  let t = ((x0 * x1) + (y0 * y1)) / len2
+  if (t < 0) t = 0
+  if (t > 1) t = 1
+
+  const projX = x0 - (t * x1)
+  const projY = y0 - (t * y1)
+  return Math.hypot(projX, projY) / 1000
+}
+
+function getIncomingRunwayFlight(runwayFeature, flights = []) {
+  const coords = runwayFeature?.geometry?.coordinates
+  if (!Array.isArray(coords) || coords.length < 2) return null
+
+  const [start, end] = coords
+  const startLat = start[1]
+  const startLon = start[0]
+  const endLat = end[1]
+  const endLon = end[0]
+  if (!Number.isFinite(startLat) || !Number.isFinite(startLon) || !Number.isFinite(endLat) || !Number.isFinite(endLon)) {
+    return null
+  }
+
+  let bestFlight = null
+  let bestScore = Infinity
+
+  for (const flight of flights) {
+    const lat = Number(flight?.latitude)
+    const lon = Number(flight?.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
+    if (flight.on_ground) continue
+
+    const heading = Number(flight.heading)
+    if (!Number.isFinite(heading)) continue
+    const speed = Number(flight.velocity)
+    if (!Number.isFinite(speed) || speed < RUNWAY_INCOMING.minSpeedMs) continue
+
+    const lineDist = distanceToSegmentKm(lat, lon, start, end)
+    if (!Number.isFinite(lineDist) || lineDist > RUNWAY_INCOMING.maxLineDistanceKm) continue
+
+    const endpointDistanceStart = distanceKm(lat, lon, startLat, startLon)
+    const endpointDistanceEnd = distanceKm(lat, lon, endLat, endLon)
+    const endpointDistance = Math.min(endpointDistanceStart, endpointDistanceEnd)
+    if (!Number.isFinite(endpointDistance) || endpointDistance > RUNWAY_INCOMING.maxEndpointDistanceKm) continue
+
+    const altitude = Number(flight.baro_altitude ?? flight.geo_altitude)
+    if (Number.isFinite(altitude) && (altitude < 40 || altitude > RUNWAY_INCOMING.maxAltitudeM)) continue
+
+    const headingToStart = bearingDeg(lat, lon, startLat, startLon)
+    const headingToEnd = bearingDeg(lat, lon, endLat, endLon)
+    const deltaToStart = angularDiff(heading, headingToStart)
+    const deltaToEnd = angularDiff(heading, headingToEnd)
+    const headingDelta = Math.min(deltaToStart, deltaToEnd)
+    if (headingDelta > RUNWAY_INCOMING.headingToleranceDeg) continue
+
+    const score = (lineDist * 60) + (endpointDistance * 14) + headingDelta
+    if (score < bestScore) {
+      bestScore = score
+      bestFlight = flight
+    }
+  }
+
+  return bestFlight
+}
+
 function withAlpha(rgb, alpha) {
   return `rgba(${rgb}, ${alpha})`
 }
@@ -25,6 +121,7 @@ export default function FlightMap({
   flights,
   selectedFlight,
   onSelect,
+  onRunwaySelect,
   track,
   detailPanelWidth = 0,
 }) {
@@ -33,6 +130,8 @@ export default function FlightMap({
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
   const prevIcaoSetRef = useRef(null)
+  const onRunwaySelectRef = useRef(onRunwaySelect)
+  const flightsRef = useRef(flights)
   const onSelectRef = useRef(onSelect)
   const selectedFlightRef = useRef(selectedFlight)
   const [mapReady, setMapReady] = useState(false)
@@ -47,6 +146,8 @@ export default function FlightMap({
   }
 
   useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
+  useEffect(() => { onRunwaySelectRef.current = onRunwaySelect }, [onRunwaySelect])
+  useEffect(() => { flightsRef.current = flights }, [flights])
   useEffect(() => { selectedFlightRef.current = selectedFlight }, [selectedFlight])
 
   // Init map once
@@ -211,6 +312,45 @@ export default function FlightMap({
       map.on('click', 'planes-layer', e => {
         const icao24 = e.features[0]?.properties?.icao24
         if (icao24) onSelectRef.current?.(icao24)
+      })
+
+      // ── Click runway to orient view and surface inbound alert ─────────
+      map.on('mouseenter', 'runways-surface', () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mouseleave', 'runways-surface', () => {
+        map.getCanvas().style.cursor = ''
+      })
+      map.on('click', 'runways-surface', e => {
+        const feature = e.features?.[0]
+        const coordinates = feature?.geometry?.coordinates
+        if (!feature || !Array.isArray(coordinates) || coordinates.length < 2) return
+        const [start, end] = coordinates
+        const centerLon = (start[0] + end[0]) / 2
+        const centerLat = (start[1] + end[1]) / 2
+        const runwayBearing = bearingDeg(start[1], start[0], end[1], end[0])
+
+        map.flyTo({
+          center: [centerLon, centerLat],
+          bearing: runwayBearing,
+          zoom: 14.8,
+          pitch: 56,
+          duration: 780,
+          essential: true,
+        })
+
+        const incomingFlight = getIncomingRunwayFlight(feature, flightsRef.current)
+        if (!incomingFlight) {
+          onRunwaySelectRef.current?.(null)
+          return
+        }
+
+        onRunwaySelectRef.current?.({
+          runwayId: feature.properties?.id,
+          runwayLabel: feature.properties?.id,
+          flightId: incomingFlight.icao24,
+          flightLabel: (incomingFlight.callsign || incomingFlight.icao24).trim(),
+        })
       })
 
       isLoadedRef.current = true
