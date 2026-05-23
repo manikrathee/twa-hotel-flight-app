@@ -8,7 +8,11 @@
       "Bash(agent-browser get *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npm install *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(agent-browser scrollintoview *)",
+      "Bash(agent-browser scroll *)"
     ]
   }
 }
