@@ -52,8 +52,8 @@ function DataSourceBadge({ dataSource }) {
       display: 'flex',
       alignItems: 'center',
       gap: 6,
-      background: 'rgba(255,180,0,0.08)',
-      border: '1px solid rgba(255,180,0,0.3)',
+      background: 'rgba(var(--amber-rgb), 0.09)',
+      border: '1px solid rgba(var(--amber-rgb), 0.38)',
       borderRadius: 999,
       padding: '3px 9px',
       marginRight: 8,
@@ -68,6 +68,7 @@ function DataSourceBadge({ dataSource }) {
 }
 
 function PanelControl({ label, min, max, value, onChange }) {
+  const controlId = `${label.toLowerCase()}-slider`
   return (
     <label style={{
       display: 'grid',
@@ -79,6 +80,8 @@ function PanelControl({ label, min, max, value, onChange }) {
     }}>
       <span>{label}</span>
       <input
+        id={controlId}
+        aria-label={`${label} panel width in px`}
         type="range"
         min={min}
         max={max}
@@ -113,6 +116,7 @@ export default function HUDBar({
   const runways = weather ? estimateActiveRunways(windDir) : []
   const airborne = flights.length
   const blocked = rateLimitStatus === 'blocked'
+  const feedLabel = blocked ? 'HOLD' : 'LIVE'
 
   return (
     <div className="hudbar">
@@ -135,7 +139,7 @@ export default function HUDBar({
             boxShadow: blocked ? '0 0 8px var(--red)' : '0 0 8px var(--green)',
           }} />
           <span style={{ fontSize: 12, color: blocked ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
-            LIVE
+            {feedLabel}
           </span>
         </div>
 

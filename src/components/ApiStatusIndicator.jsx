@@ -30,7 +30,7 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
     const ageSec = Math.max(0, Math.floor((nowMs - Number(lastUpdated)) / 1000))
     const ageLabel = ageSec < 120 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>
+      <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>
         <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--amber)' }} />
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 9, color: 'var(--amber)', letterSpacing: 2 }}>
           STALE {ageLabel}
@@ -43,7 +43,7 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
   const label = status === 'blocked' ? `API HOLD ${remaining}s` : 'API SLOW'
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>
+    <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>
       <div style={{
         width: 5, height: 5, borderRadius: '50%', background: color,
         boxShadow: `0 0 6px ${color}`,

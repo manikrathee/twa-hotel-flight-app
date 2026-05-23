@@ -317,7 +317,12 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         }
       `}</style>
 
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div
+        ref={containerRef}
+        role="application"
+        aria-label="Live flight map around KJFK"
+        style={{ width: '100%', height: '100%' }}
+      />
 
       {/* Track mode banner */}
       {track?.path?.length > 0 && selectedFlight && (
@@ -351,6 +356,8 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       {/* Reset view button */}
       <button
         onClick={resetView}
+        type="button"
+        aria-label="Reset map to JFK runway view"
         title="Reset to JFK runway view"
         style={{
           position: 'absolute', bottom: 44, right: 12,
