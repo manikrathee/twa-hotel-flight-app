@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, useState } from 'react'
+import { memo, useDeferredValue, useMemo, useState } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
@@ -72,18 +72,45 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, sear
   const [sortAsc, setSortAsc] = useState(true)
   const [search, setSearch] = useState('')
   const [showAllEnroute, setShowAllEnroute] = useState(false)
-  const hasSearch = search.trim().length > 0
 
-  const filteredFlights = deferredFlights.filter(f => matchesSearch(f, search))
-  const sortedFlights = sortFlights(filteredFlights, sortBy, sortAsc)
+  const searchTerm = search.trim().toLowerCase()
+  const hasSearch = searchTerm.length > 0
 
-  const approach = sortedFlights.filter(f => f.distKm < KM_APPROACH)
-  const terminal = sortedFlights.filter(f => f.distKm >= KM_APPROACH && f.distKm < KM_TERMINAL)
-  const enrouteAll = sortedFlights.filter(f => f.distKm >= KM_TERMINAL)
-  const enroute = showAllEnroute ? enrouteAll : enrouteAll.slice(0, MAX_ENROUTE)
+  const filteredFlights = useMemo(() => {
+    if (!hasSearch) return deferredFlights
+    return deferredFlights.filter(f => matchesSearch(f, searchTerm))
+  }, [deferredFlights, hasSearch, searchTerm])
 
-  const totalShown = approach.length + terminal.length + enroute.length
-  const totalShownLabel = totalShown === filteredFlights.length ? `${totalShown}` : `${totalShown} / ${filteredFlights.length}`
+  const sortedFlights = useMemo(() => sortFlights(filteredFlights, sortBy, sortAsc), [filteredFlights, sortBy, sortAsc])
+
+  const { approach, terminal, enrouteAll, enroute, totalShown, totalShownLabel } = useMemo(() => {
+    const approachZone = []
+    const terminalZone = []
+    const enrouteAllZone = []
+
+    for (const flight of sortedFlights) {
+      if (flight.distKm < KM_APPROACH) {
+        approachZone.push(flight)
+      } else if (flight.distKm < KM_TERMINAL) {
+        terminalZone.push(flight)
+      } else {
+        enrouteAllZone.push(flight)
+      }
+    }
+
+    const visibleEnroute = showAllEnroute ? enrouteAllZone : enrouteAllZone.slice(0, MAX_ENROUTE)
+    const shownTotal = approachZone.length + terminalZone.length + visibleEnroute.length
+
+    return {
+      approach: approachZone,
+      terminal: terminalZone,
+      enrouteAll: enrouteAllZone,
+      enroute: visibleEnroute,
+      totalShown: shownTotal,
+      totalShownLabel: shownTotal === filteredFlights.length ? `${shownTotal}` : `${shownTotal} / ${filteredFlights.length}`,
+    }
+  }, [filteredFlights.length, showAllEnroute, sortedFlights])
+
   const showSearchNoData = hasSearch && totalShown === 0
   const showNoData = !loading && totalShown === 0 && !showSearchNoData
   const enrouteSummary = enrouteAll.length > MAX_ENROUTE && !showAllEnroute

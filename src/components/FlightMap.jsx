@@ -228,6 +228,14 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     const src = mapRef.current.getSource('planes')
     if (!src) return
 
+    if (!flights.length) {
+      if (prevIcaoSetRef.current?.size) {
+        src.setData({ type: 'FeatureCollection', features: [] })
+      }
+      prevIcaoSetRef.current = new Set()
+      return
+    }
+
     const features = buildPlaneFeatures(flights, selectedIcao)
 
     if (prevIcaoSetRef.current === null) {

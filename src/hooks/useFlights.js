@@ -17,6 +17,34 @@ const TWA_VISIBLE_RADIUS_KM = TWA_VISIBLE_RADIUS_MI / 0.621371
 const routeCache = new Map()
 const inFlightRouteLookup = new Map()
 
+function sameFlightSnapshot(left, right) {
+  return (
+    left.icao24 === right.icao24 &&
+    left.callsign === right.callsign &&
+    left.latitude === right.latitude &&
+    left.longitude === right.longitude &&
+    left.baro_altitude === right.baro_altitude &&
+    left.velocity === right.velocity &&
+    left.vertical_rate === right.vertical_rate &&
+    left.heading === right.heading &&
+    left.geo_altitude === right.geo_altitude &&
+    left.distKm === right.distKm &&
+    left.squawk === right.squawk &&
+    left.last_contact === right.last_contact &&
+    left.time_position === right.time_position &&
+    left.origin_country === right.origin_country &&
+    left.on_ground === right.on_ground
+  )
+}
+
+function hasFlightsChanged(prev, next) {
+  if (prev.length !== next.length) return true
+  for (let i = 0; i < next.length; i += 1) {
+    if (!sameFlightSnapshot(prev[i], next[i])) return true
+  }
+  return false
+}
+
 function normalizeCallsign(callsign) {
   return String(callsign || '').trim().toUpperCase()
 }
@@ -123,6 +151,8 @@ export default function useFlights(selectedIcao = null) {
   const timerRef   = useRef(null)
   const mountedRef = useRef(true)
   const loadRef    = useRef(null)
+  const flightsRef = useRef([])
+  const loadInFlightRef = useRef(false)
 
   const scheduleNext = useCallback((delayMs) => {
     clearTimeout(timerRef.current)
@@ -131,6 +161,7 @@ export default function useFlights(selectedIcao = null) {
 
   const load = useCallback(async () => {
     if (!mountedRef.current) return
+    if (loadInFlightRef.current) return
 
     if (isBlocked()) {
       const remaining = backoffRemainingMs()
@@ -140,12 +171,17 @@ export default function useFlights(selectedIcao = null) {
       return
     }
 
+    loadInFlightRef.current = true
     try {
       const raw = await fetchFlights()
       const filtered = await enrichFlights(raw)
       if (!mountedRef.current) return
 
-      setFlights(filtered)
+      if (hasFlightsChanged(flightsRef.current, filtered)) {
+        setFlights(filtered)
+        flightsRef.current = filtered
+      }
+
       setLastUpdated(new Date())
       setIsStale(false)
       setError(null)
@@ -176,7 +212,10 @@ export default function useFlights(selectedIcao = null) {
         if (cached && mountedRef.current) {
           const filtered = await enrichFlights(cached.flights)
           if (!mountedRef.current) return
-          setFlights(filtered)
+          if (hasFlightsChanged(flightsRef.current, filtered)) {
+            setFlights(filtered)
+            flightsRef.current = filtered
+          }
           setDataSource({ type: 'cache', cachedAt: cached.cachedAt })
           evictRouteCache()
           // Don't update lastUpdated — the stale timer should fire normally
@@ -185,6 +224,7 @@ export default function useFlights(selectedIcao = null) {
         // Cache also unavailable — keep whatever flights are already shown
       }
     } finally {
+      loadInFlightRef.current = false
       if (mountedRef.current) setLoading(false)
     }
   }, [pollMs, scheduleNext])
