@@ -14,10 +14,16 @@ export async function fetchCallsignRoute(callsign) {
   }
 }
 
-export async function fetchAircraftInfo(icao24) {
+export async function fetchAircraftInfo(icao24, callsign = '') {
   if (!icao24) return null
+  const params = new URLSearchParams()
+  if (callsign) params.set('callsign', callsign.trim())
+
+  const qs = params.toString()
+  const path = qs ? `/aircraft/${icao24.toLowerCase()}?${qs}` : `/aircraft/${icao24.toLowerCase()}`
+
   try {
-    const res = await fetch(`${BASE}/aircraft/${icao24.toLowerCase()}`, {
+    const res = await fetch(`${BASE}${path}`, {
       signal: AbortSignal.timeout(6000)
     })
     if (!res.ok) return null

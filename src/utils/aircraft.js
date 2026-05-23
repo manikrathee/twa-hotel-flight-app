@@ -99,8 +99,10 @@ export function parseFlightNumber(callsign) {
 
 // Human-readable model label
 export function modelLabel(manufacturer, model, typeCode) {
-  if (model) return model
-  if (typeCode) {
+  const cleanModel = sanitizeText(model)
+  if (cleanModel) return cleanModel
+  const cleanTypeCode = sanitizeText(typeCode)
+  if (cleanTypeCode) {
     const labels = {
       B737: 'Boeing 737', B738: 'Boeing 737-800', B739: 'Boeing 737-900',
       A319: 'Airbus A319', A320: 'Airbus A320', A321: 'Airbus A321',
@@ -114,14 +116,25 @@ export function modelLabel(manufacturer, model, typeCode) {
       E190: 'Embraer E190', E175: 'Embraer E175',
       CRJ9: 'Bombardier CRJ-900', DH8D: 'Bombardier Q400',
     }
-    return labels[typeCode.toUpperCase()] || typeCode
+    return labels[cleanTypeCode.toUpperCase()] || cleanTypeCode
   }
-  return 'Unknown Aircraft'
+  const cleanManufacturer = sanitizeText(manufacturer)
+  if (cleanManufacturer) return cleanManufacturer
+  return null
+}
+
+function sanitizeText(value) {
+  if (!value && value !== 0) return null
+  const clean = String(value).trim()
+  if (!clean) return null
+  if (/^(unknown|n\/a|na|none|not available|tbd)$/i.test(clean)) return null
+  return clean
 }
 
 export function getAircraftFacts(typeCode) {
-  if (!typeCode) return null
-  return AIRCRAFT_FACTS[typeCode.toUpperCase()] || null
+  const cleanTypeCode = sanitizeText(typeCode)
+  if (!cleanTypeCode) return null
+  return AIRCRAFT_FACTS[cleanTypeCode.toUpperCase()] || null
 }
 
 // Engine count hint
