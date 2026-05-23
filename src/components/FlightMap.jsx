@@ -104,7 +104,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         const el = document.createElement('div')
         el.textContent = f.properties.label
         el.style.cssText = [
-          'color:rgba(var(--text-soft-rgb), 0.72)',
+          'color:rgba(var(--text-soft-rgb), 0.92)',
           'font-family:var(--font-mono)',
           'font-size:10px',
           'font-weight:600',
@@ -281,7 +281,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     const src = mapRef.current.getSource('path')
     if (!src) return
 
-    if (!track?.path?.length) {
+    if (!selectedFlight || !track?.path?.length) {
       src.setData({ type: 'FeatureCollection', features: [] })
       return
     }
@@ -300,7 +300,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }],
     })
 
-  }, [track, mapReady])
+  }, [track, mapReady, selectedFlight])
 
   const resetView = useCallback(() => {
     mapRef.current?.flyTo({ ...INITIAL_VIEW, duration: 900, essential: true })
@@ -326,14 +326,14 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
           background: var(--panel-overlay) !important;
           color: rgba(var(--text-soft-rgb), 0.9) !important;
           font-size: 9px !important;
-          font-family: 'DM Mono', monospace !important;
+          font-family: var(--font-mono) !important;
         }
         .maplibregl-ctrl-attrib a { color: rgba(var(--cyan-alt-rgb), 0.45) !important; }
         .twa-popup .maplibregl-popup-content {
           background: var(--panel-overlay-soft) !important;
           border: 1px solid rgba(var(--cyan-alt-rgb), 0.25) !important;
           color: rgba(var(--text-soft-rgb), 0.95) !important;
-          font-family: 'DM Mono', monospace !important;
+          font-family: var(--font-mono) !important;
           font-size: 11px !important;
           padding: 5px 10px !important;
           border-radius: 4px !important;

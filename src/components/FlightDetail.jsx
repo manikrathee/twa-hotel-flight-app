@@ -74,8 +74,8 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
     <div style={{
       width: '100%',
       height: '100%',
-      background: 'rgba(8,13,20,0.98)',
-      borderLeft: '1px solid rgba(0,212,200,0.22)',
+      background: 'var(--panel-strong)',
+      borderLeft: '1px solid var(--border-bright)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -85,12 +85,12 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
       {/* ── Header ───────────────────────────────────── */}
       <div style={{
         padding: '14px 22px 12px',
-        borderBottom: '1px solid rgba(0,212,200,0.1)',
+        borderBottom: '1px solid var(--panel-line)',
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
         flexShrink: 0,
-        background: 'linear-gradient(180deg, rgba(0,212,200,0.07) 0%, transparent 100%)',
+        background: 'linear-gradient(180deg, rgba(var(--cyan-alt-rgb), 0.06) 0%, transparent 100%)',
       }}>
         <div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 0.2, marginBottom: 3, fontWeight: 600 }}>
@@ -109,13 +109,13 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
             aria-label={`Close details for ${flightNum || callsign}`}
             onClick={onClose}
             style={{
-              background: 'none', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5,
+              background: 'none', border: '1px solid var(--panel-subtle)', borderRadius: 5,
               color: 'var(--text-dim)', cursor: 'pointer', padding: '7px 14px',
               fontSize: 12, fontWeight: 600, letterSpacing: 0.2,
               transition: 'border-color 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = 'var(--text)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = 'var(--text-dim)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--panel-divider)'; e.currentTarget.style.color = 'var(--text)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--panel-subtle)'; e.currentTarget.style.color = 'var(--text-dim)' }}
           >
             ✕ CLOSE
           </button>
@@ -137,16 +137,16 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         {/* ── Aircraft hero ─────────────────────────── */}
         <div style={{
           padding: '16px 22px',
-          borderBottom: '1px solid rgba(0,212,200,0.08)',
+          borderBottom: '1px solid var(--panel-line)',
           display: 'flex', alignItems: 'flex-start', gap: 16,
-          background: 'linear-gradient(135deg, rgba(0,212,200,0.04) 0%, transparent 60%)',
+          background: 'linear-gradient(135deg, rgba(var(--cyan-alt-rgb), 0.045) 0%, transparent 60%)',
         }}>
           <div style={{ flexShrink: 0 }}>
             {photo
               ? <img
                   src={photo}
                   alt={`${flightNum || callsign} aircraft photo`}
-                  style={{ width: 120, height: 80, objectFit: 'cover', border: '1px solid var(--border)', borderRadius: 6, background: 'rgba(255,255,255,0.04)' }}
+                  style={{ width: 120, height: 80, objectFit: 'cover', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--panel-subtle)' }}
                 />
               : <AircraftSilhouette typeCode={typeCode} size={100} />
             }
@@ -173,7 +173,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         </div>
 
         {/* ── Live telemetry ────────────────────────── */}
-        <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(0,212,200,0.08)' }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--panel-line)' }}>
           <SectionLabel>LIVE TELEMETRY</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
             <BigStat label="ALTITUDE" value={altFt.toLocaleString()} unit="ft"
@@ -207,7 +207,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         </div>
 
         {/* ── Altitude profile ──────────────────────── */}
-        <div style={{ padding: '14px 22px', borderBottom: '1px solid rgba(0,212,200,0.08)' }}>
+        <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <SectionLabel>ALTITUDE PROFILE</SectionLabel>
             <span style={{ fontSize: 13, color: 'var(--cyan)', fontWeight: 600 }}>
@@ -219,14 +219,14 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
 
         {/* ── Route ────────────────────────────────── */}
         {(origin || dest) && (
-          <div style={{ padding: '14px 22px', borderBottom: '1px solid rgba(0,212,200,0.08)' }}>
+          <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
             <SectionLabel>ROUTE</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2 }}>
               <AirportBadge airport={origin} />
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: '100%', height: 1, background: 'repeating-linear-gradient(90deg, rgba(0,212,200,0.45) 0, rgba(0,212,200,0.45) 5px, transparent 5px, transparent 10px)' }} />
+                <div style={{ width: '100%', height: 1, background: 'repeating-linear-gradient(90deg, rgba(var(--cyan-alt-rgb), 0.45) 0, rgba(var(--cyan-alt-rgb), 0.45) 5px, transparent 5px, transparent 10px)' }} />
                 {routeMiles && (
-                  <span style={{ fontSize: 12, color: 'rgba(0,212,200,0.65)', letterSpacing: 0.1 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(var(--cyan-alt-rgb), 0.65)', letterSpacing: 0.1 }}>
                     {routeMiles.toLocaleString()} mi
                   </span>
                 )}
@@ -243,7 +243,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
               <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-dim)' }}>
                 {route.airline.name}
                 {(route.airline.iata || route.airline.icao) && (
-                  <span style={{ marginLeft: 8, fontSize: 12, color: 'rgba(0,212,200,0.55)', fontWeight: 600 }}>
+                  <span style={{ marginLeft: 8, fontSize: 12, color: 'rgba(var(--cyan-alt-rgb), 0.55)', fontWeight: 600 }}>
                     {[route.airline.iata, route.airline.icao].filter(Boolean).join(' / ')}
                   </span>
                 )}
@@ -308,7 +308,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
             onClick={() => setShowPath(v => !v)}
             style={{
               width: '100%', background: 'none', border: 'none',
-              borderBottom: `1px solid ${showPath ? 'rgba(0,212,200,0.4)' : 'rgba(255,255,255,0.07)'}`,
+              borderBottom: `1px solid ${showPath ? 'rgba(var(--cyan-alt-rgb), 0.45)' : 'var(--panel-divider)'}`,
               padding: '0 0 10px 0', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               color: showPath ? 'var(--cyan)' : 'var(--text-dim)',
@@ -373,8 +373,8 @@ function IdentBadge({ label, value, alert }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 2,
-      background: alert ? 'rgba(227,30,38,0.12)' : 'rgba(255,255,255,0.04)',
-      border: `1px solid ${alert ? 'rgba(227,30,38,0.35)' : 'rgba(255,255,255,0.1)'}`,
+      background: alert ? 'rgba(var(--red-alt-rgb), 0.12)' : 'var(--panel-subtle)',
+      border: `1px solid ${alert ? 'rgba(var(--red-alt-rgb), 0.35)' : 'var(--panel-border)'}`,
       borderRadius: 5, padding: '4px 10px',
     }}>
       <span style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.2 }}>{label}</span>
@@ -386,8 +386,8 @@ function IdentBadge({ label, value, alert }) {
 function BigStat({ label, value, unit, sub, color, bar }) {
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.03)',
-      border: '1px solid rgba(255,255,255,0.07)',
+      background: 'var(--panel-soft)',
+      border: '1px solid var(--panel-border)',
       borderRadius: 6,
       padding: '10px 12px',
       animation: 'metric-pop 0.28s ease both',
@@ -403,7 +403,7 @@ function BigStat({ label, value, unit, sub, color, bar }) {
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 3 }}>{sub}</div>
       )}
       {bar !== undefined && (
-        <div style={{ marginTop: 7, height: 2, background: 'rgba(255,255,255,0.07)', borderRadius: 1 }}>
+        <div style={{ marginTop: 7, height: 2, background: 'var(--panel-line)', borderRadius: 1 }}>
           <div style={{ height: '100%', borderRadius: 1, background: color || 'var(--cyan)', width: `${Math.round(bar * 100)}%`, transition: 'width 0.5s ease' }} />
         </div>
       )}
@@ -415,7 +415,7 @@ function DossierSection({ title, children }) {
   const valid = Array.isArray(children) ? children.filter(Boolean) : children
   if (!valid || (Array.isArray(valid) && valid.length === 0)) return null
   return (
-    <div style={{ padding: '14px 22px', borderBottom: '1px solid rgba(0,212,200,0.07)' }}>
+    <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
       <SectionLabel>{title}</SectionLabel>
       <div>{children}</div>
     </div>
@@ -428,7 +428,7 @@ function InfoRow({ label, value, mono, color }) {
     <div style={{
       display: 'flex', justifyContent: 'space-between', gap: 16,
       padding: '7px 0',
-      borderBottom: '1px solid rgba(255,255,255,0.04)',
+      borderBottom: '1px solid var(--panel-line)',
     }}>
       <span style={{ fontSize: 13, color: 'var(--text-dim)', flexShrink: 0 }}>{label}</span>
       <span style={{
@@ -446,7 +446,7 @@ function InfoRow({ label, value, mono, color }) {
 
 function MiniKV({ label, value }) {
   return (
-    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 5, padding: '6px 10px' }}>
+    <div style={{ background: 'var(--panel-soft)', border: '1px solid var(--panel-border)', borderRadius: 5, padding: '6px 10px' }}>
       <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.2, marginBottom: 3 }}>{label}</div>
       <div style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>{value}</div>
     </div>
@@ -464,7 +464,7 @@ function AirportBadge({ airport }) {
         {airport.municipality || airport.name?.slice(0, 18)}
       </div>
       {airport.country && (
-        <div style={{ fontSize: 10, color: 'rgba(84,96,112,0.7)', marginTop: 1 }}>{airport.country}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>{airport.country}</div>
       )}
     </div>
   )
@@ -485,7 +485,7 @@ function AltitudeBar({ altFt, vrFpm }) {
           </span>
         ))}
       </div>
-      <div style={{ height: 9, background: 'rgba(255,255,255,0.06)', borderRadius: 5, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ height: 9, background: 'var(--panel-line)', borderRadius: 5, position: 'relative', overflow: 'hidden' }}>
         <div style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
           width: `${Math.round(pct * 100)}%`,
@@ -502,7 +502,7 @@ function AltitudeBar({ altFt, vrFpm }) {
           <div key={l} style={{
             position: 'absolute', top: 0, bottom: 0,
             left: `${Math.round(l / 42000 * 100)}%`,
-            width: 1, background: 'rgba(255,255,255,0.15)',
+            width: 1, background: 'var(--panel-subtle)',
           }} />
         ))}
       </div>
