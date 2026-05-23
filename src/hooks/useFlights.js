@@ -7,12 +7,20 @@ import { flightCache } from '../cache/flightCache'
 import { JFK, TWA_HOTEL, TWA_VISIBLE_RADIUS_MI, routeTouchesJfk } from '../config/airspace'
 
 const BASE_POLL_MS          = 15_000
-const SELECTED_POLL_AUTH_MS = 5_000
-const SELECTED_POLL_ANON_MS = 10_000
+const SELECTED_POLL_AUTH_MS = 2_500
+const SELECTED_POLL_ANON_MS = 5_000
 const STALE_SHOW_MS         = 90_000  // show stale badge after 90s without a fresh update
 const HAS_OPENSKY_AUTH      = Boolean(import.meta.env.VITE_OPENSKY_CLIENT_ID)
 const ROUTE_TTL_MS          = 20 * 60 * 1000
 const TWA_VISIBLE_RADIUS_KM = TWA_VISIBLE_RADIUS_MI / 0.621371
+const EXTRAPOLATION_TICK_MS  = 1_000
+const EXTRAPOLATED_AGE_LIMIT = 60
+const COLLISION_DISTANCE_KM = 0.08
+const COLLISION_ALT_CEILING_M = 80
+const CONSTRAINED_FLIGHT_LIMIT = 30
+const CONSTRAINED_ROUTE_LOOKUP_LIMIT = 24
+const HIGH_DENSITY_FLIGHT_THRESHOLD = 120
+const SLOW_CONN_TYPES = new Set(['slow-2g', '2g'])
 
 const routeCache = new Map()
 const inFlightRouteLookup = new Map()
@@ -63,6 +71,128 @@ function setCachedRoute(callsign, route) {
   routeCache.set(callsign, { route: route ?? null, ts: Date.now() })
 }
 
+function isConnectionConstrained() {
+  if (typeof navigator === 'undefined') return false
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
+  if (!conn) return false
+  if (typeof conn.type === 'string' && conn.type === 'cellular') return true
+  if (typeof conn.effectiveType === 'string' && SLOW_CONN_TYPES.has(conn.effectiveType)) return true
+  if (typeof conn.downlink === 'number' && conn.downlink > 0 && conn.downlink < 1.25) return true
+  if (typeof conn.rtt === 'number' && conn.rtt > 900) return true
+  return false
+}
+
+function normalizeFlightState(raw) {
+  const latitude = Number(raw.latitude)
+  const longitude = Number(raw.longitude)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+  const altitude = Number(raw.baro_altitude)
+  const verticalRate = Number(raw.vertical_rate)
+  const heading = Number(raw.heading)
+  const velocity = Number(raw.velocity)
+  const geoAltitude = Number(raw.geo_altitude)
+  const squawk = raw.squawk == null ? null : String(raw.squawk).trim()
+
+  return {
+    ...raw,
+    icao24: String(raw.icao24 || '').trim().toLowerCase(),
+    callsign: String(raw.callsign || '').trim(),
+    latitude,
+    longitude,
+    baro_altitude: Number.isFinite(altitude) ? altitude : null,
+    geo_altitude: Number.isFinite(geoAltitude) ? geoAltitude : null,
+    vertical_rate: Number.isFinite(verticalRate) ? verticalRate : null,
+    heading: Number.isFinite(heading) ? heading : null,
+    velocity: Number.isFinite(velocity) ? velocity : null,
+    squawk,
+  }
+}
+
+function flightFreshnessMs(flight) {
+  return Math.max(flight.time_position || 0, flight.last_contact || 0) * 1000
+}
+
+function isCollisionCandidate(a, b) {
+  if (!a || !b) return false
+  const distKm = distanceKm(a.latitude, a.longitude, b.latitude, b.longitude)
+  if (distKm > COLLISION_DISTANCE_KM) return false
+
+  const aAlt = a.baro_altitude ?? a.geo_altitude
+  const bAlt = b.baro_altitude ?? b.geo_altitude
+  if (Number.isFinite(aAlt) && Number.isFinite(bAlt) && Math.abs(aAlt - bAlt) > COLLISION_ALT_CEILING_M) return false
+
+  return true
+}
+
+function dedupeAndValidateFlights(list) {
+  if (!list.length) return []
+
+  const byIcao = new Map()
+  for (const flight of list) {
+    const id = flight.icao24
+    if (!id) continue
+    const existing = byIcao.get(id)
+    if (!existing || flightFreshnessMs(flight) > flightFreshnessMs(existing)) byIcao.set(id, flight)
+  }
+
+  const deduped = Array.from(byIcao.values())
+  const ordered = deduped.sort((a, b) => flightFreshnessMs(b) - flightFreshnessMs(a))
+
+  const cleaned = []
+  for (const flight of ordered) {
+    let replaced = false
+
+    const collisionIndex = cleaned.findIndex(existing => isCollisionCandidate(flight, existing))
+    if (collisionIndex >= 0) {
+      const existing = cleaned[collisionIndex]
+      if (flightFreshnessMs(flight) > flightFreshnessMs(existing)) {
+        cleaned[collisionIndex] = flight
+      }
+      replaced = true
+    }
+
+    if (!replaced) cleaned.push(flight)
+  }
+
+  return cleaned.sort((a, b) => a.distKm - b.distKm)
+}
+
+function extrapolatePoint(flight, nowMs) {
+  const lat = flight.latitude
+  const lon = flight.longitude
+  if (lat == null || lon == null) return flight
+
+  const baseSeconds = flight.time_position || flight.last_contact
+  if (!baseSeconds) return flight
+
+  const age = nowMs / 1000 - baseSeconds
+  if (age <= 0 || age > EXTRAPOLATED_AGE_LIMIT) return flight
+
+  const speed = Number(flight.velocity)
+  if (!Number.isFinite(speed) || speed <= 0) return flight
+
+  const heading = Number(flight.heading) || 0
+  const meters = speed * age
+  const headingRad = (heading * Math.PI) / 180
+  const latScale = 111_132
+  const lonScale = Math.max(1, 111_320 * Math.cos((lat * Math.PI) / 180))
+  const nextLat = lat + (Math.cos(headingRad) * meters) / latScale
+  const nextLon = lon + (Math.sin(headingRad) * meters) / lonScale
+
+  const vr = Number(flight.vertical_rate)
+  const nextAlt = Number.isFinite(vr)
+    ? flight.baro_altitude + vr * age
+    : flight.baro_altitude
+
+  return {
+    ...flight,
+    latitude: nextLat,
+    longitude: nextLon,
+    baro_altitude: Number.isFinite(nextAlt) ? nextAlt : flight.baro_altitude,
+  }
+}
+
 function evictRouteCache() {
   const now = Date.now()
   for (const [callsign, entry] of routeCache) {
@@ -97,9 +227,13 @@ async function resolveRoute(callsign) {
   return request
 }
 
-async function enrichFlights(raw) {
+async function enrichFlights(raw, options = {}) {
+  const { constrained } = options
+
   const candidates = raw
-    .filter(f => !f.on_ground && f.latitude != null && f.longitude != null)
+    .map(normalizeFlightState)
+    .filter(Boolean)
+    .filter(f => !f.on_ground)
     .map(f => {
       const distToTwaKm = distanceKm(TWA_HOTEL.lat, TWA_HOTEL.lon, f.latitude, f.longitude)
       if (distToTwaKm > TWA_VISIBLE_RADIUS_KM) return null
@@ -110,11 +244,16 @@ async function enrichFlights(raw) {
       }
     })
     .filter(Boolean)
+    .sort((a, b) => a.distKm - b.distKm)
 
   if (!candidates.length) return []
 
+  const routeWindow = constrained
+    ? candidates.slice(0, CONSTRAINED_ROUTE_LOOKUP_LIMIT)
+    : candidates
+
   const callsigns = [...new Set(
-    candidates
+    routeWindow
       .map(f => normalizeCallsign(f.callsign))
       .filter(Boolean)
   )]
@@ -124,7 +263,7 @@ async function enrichFlights(raw) {
   )
   const routeByCallsign = new Map(routePairs)
 
-  return candidates
+  const ranked = routeWindow
     .filter(f => {
       const callsign = normalizeCallsign(f.callsign)
       if (!callsign) return true
@@ -132,7 +271,20 @@ async function enrichFlights(raw) {
       if (!route) return true
       return routeTouchesJfk(route)
     })
-    .sort((a, b) => a.distKm - b.distKm)
+
+  const validatedRanked = dedupeAndValidateFlights(ranked)
+  if (!constrained) return validatedRanked
+
+  const prioritized = [...validatedRanked]
+  if (prioritized.length >= CONSTRAINED_FLIGHT_LIMIT) return prioritized.slice(0, CONSTRAINED_FLIGHT_LIMIT)
+
+  for (let i = CONSTRAINED_ROUTE_LOOKUP_LIMIT; i < candidates.length && prioritized.length < CONSTRAINED_FLIGHT_LIMIT; i += 1) {
+    const candidate = candidates[i]
+    if (!candidate) continue
+    if (!prioritized.some(f => f.icao24 === candidate.icao24)) prioritized.push(candidate)
+  }
+
+  return dedupeAndValidateFlights(prioritized)
 }
 
 export default function useFlights(selectedIcao = null) {
@@ -147,11 +299,14 @@ export default function useFlights(selectedIcao = null) {
   const [backoffUntil, setBackoffUntil]     = useState(null)
   const [isStale, setIsStale]               = useState(false)
   const [dataSource, setDataSource]         = useState(null)     // null | { type: 'live' } | { type: 'cache', cachedAt }
+  const [isConstrained, setIsConstrained]   = useState(false)
 
   const timerRef   = useRef(null)
   const mountedRef = useRef(true)
   const loadRef    = useRef(null)
   const flightsRef = useRef([])
+  const latestRef = useRef([])
+  const extrapolationRef = useRef(null)
   const loadInFlightRef = useRef(false)
 
   const scheduleNext = useCallback((delayMs) => {
@@ -163,10 +318,14 @@ export default function useFlights(selectedIcao = null) {
     if (!mountedRef.current) return
     if (loadInFlightRef.current) return
 
-    if (isBlocked()) {
+    const networkBlocked = isBlocked()
+    const constrainedByConnection = isConnectionConstrained()
+
+    if (networkBlocked) {
       const remaining = backoffRemainingMs()
       setRateLimitStatus('blocked')
       setBackoffUntil(Date.now() + remaining)
+      setIsConstrained(true)
       scheduleNext(Math.min(remaining + 1000, pollMs))
       return
     }
@@ -174,11 +333,17 @@ export default function useFlights(selectedIcao = null) {
     loadInFlightRef.current = true
     try {
       const raw = await fetchFlights()
-      const filtered = await enrichFlights(raw)
+      const shouldConstrain = constrainedByConnection || raw.length > HIGH_DENSITY_FLIGHT_THRESHOLD
+      setIsConstrained(shouldConstrain)
+      const filtered = await enrichFlights(raw, { constrained: shouldConstrain })
       if (!mountedRef.current) return
+
+      latestRef.current = filtered
 
       if (hasFlightsChanged(flightsRef.current, filtered)) {
         setFlights(filtered)
+        flightsRef.current = filtered
+      } else {
         flightsRef.current = filtered
       }
 
@@ -194,7 +359,6 @@ export default function useFlights(selectedIcao = null) {
     } catch (e) {
       if (!mountedRef.current) return
 
-      // Rate limited — try the DB cache so the map stays populated
       const isRateLimit = e.message?.includes('429') || isBlocked()
       if (isRateLimit) {
         const remaining = backoffRemainingMs()
@@ -210,10 +374,16 @@ export default function useFlights(selectedIcao = null) {
       try {
         const cached = await fetchCachedFlights()
         if (cached && mountedRef.current) {
-          const filtered = await enrichFlights(cached.flights)
+          setIsConstrained(true)
+          const filtered = await enrichFlights(cached.flights, { constrained: true })
           if (!mountedRef.current) return
+
+          latestRef.current = filtered
+
           if (hasFlightsChanged(flightsRef.current, filtered)) {
             setFlights(filtered)
+            flightsRef.current = filtered
+          } else {
             flightsRef.current = filtered
           }
           setDataSource({ type: 'cache', cachedAt: cached.cachedAt })
@@ -262,5 +432,38 @@ export default function useFlights(selectedIcao = null) {
     return () => clearTimeout(id)
   }, [lastUpdated])
 
-  return { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs }
+  useEffect(() => {
+    clearInterval(extrapolationRef.current)
+    if (!selectedIcao) return
+
+    const tick = () => {
+      const nowMs = Date.now()
+      const latestFlights = latestRef.current
+      const selectedLiveFlight = latestFlights.find(flight => flight.icao24 === selectedIcao)
+      if (!selectedLiveFlight) return
+
+      const selectedExtrapolated = extrapolatePoint(selectedLiveFlight, nowMs)
+      const currentFlights = flightsRef.current
+      const selectedIndex = currentFlights.findIndex(flight => flight.icao24 === selectedIcao)
+      if (selectedIndex === -1) return
+
+      const currentSelected = currentFlights[selectedIndex]
+      if (sameFlightSnapshot(currentSelected, selectedExtrapolated)) return
+
+      const nextFlights = currentFlights.map((flight) => (
+        flight.icao24 === selectedIcao
+          ? selectedExtrapolated
+          : flight
+      ))
+
+      setFlights(nextFlights)
+      flightsRef.current = nextFlights
+    }
+
+    extrapolationRef.current = setInterval(tick, EXTRAPOLATION_TICK_MS)
+    tick()
+    return () => clearInterval(extrapolationRef.current)
+  }, [selectedIcao, isConstrained])
+
+  return { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs, isConstrained }
 }

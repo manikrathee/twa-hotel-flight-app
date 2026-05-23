@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import HUDBar from './components/HUDBar'
 import FlightMap from './components/FlightMap'
 import NearbyList from './components/NearbyList'
@@ -10,24 +10,64 @@ const LIST_PANEL_MIN = 320
 const LIST_PANEL_MAX = 560
 const DETAIL_PANEL_MIN = 420
 const DETAIL_PANEL_MAX = 760
+const VIEWPORT_LIST_RATIO = { normal: 0.30, constrained: 0.24 }
+const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.22, constrained: 0.18 }
+const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v))
 }
 
+function clampPanelSize(value, minimum, maximum) {
+  return clamp(Math.round(value), minimum, maximum)
+}
+
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [track, setTrack] = useState(null)
-  const [listWidth, setListWidth] = useState(390)
-  const [detailWidth, setDetailWidth] = useState(560)
+  const [viewportWidth, setViewportWidth] = useState(() => {
+    if (typeof window === 'undefined') return 1360
+    return window.innerWidth
+  })
   const searchInputRef = useRef(null)
-  const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs } = useFlights(selectedId)
+  const {
+    flights,
+    loading,
+    error,
+    lastUpdated,
+    rateLimitStatus,
+    backoffUntil,
+    isStale,
+    dataSource,
+    pollMs,
+    isConstrained
+  } = useFlights(selectedId)
   const { weather } = useWeather()
   const hasFlights = flights.length > 0
   const isInitialLoad = loading && !hasFlights
-
+  const constrainedMode = isConstrained || rateLimitStatus === 'blocked' || dataSource?.type === 'cache' || flights.length > 120
+  const widthMode = constrainedMode ? 'constrained' : 'normal'
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
+  const hasSelectedFlight = Boolean(selectedFlight)
   const effectiveSelectedId = selectedFlight ? selectedId : null
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const listWidth = useMemo(() => {
+    const ratios = hasSelectedFlight ? VIEWPORT_LIST_RATIO_WITH_DETAILS : VIEWPORT_LIST_RATIO
+    return clampPanelSize(viewportWidth * ratios[widthMode], LIST_PANEL_MIN, LIST_PANEL_MAX)
+  }, [viewportWidth, widthMode, hasSelectedFlight])
+
+  const detailWidth = useMemo(() => {
+    return clampPanelSize(viewportWidth * VIEWPORT_DETAIL_RATIO[widthMode], DETAIL_PANEL_MIN, DETAIL_PANEL_MAX)
+  }, [viewportWidth, widthMode])
+
+  const detailRefreshMs = selectedFlight ? 1000 : pollMs
 
   const handleSelect = useCallback((icao24) => {
     setSelectedId(prev => {
@@ -80,10 +120,7 @@ export default function App() {
           lastUpdated={lastUpdated}
           isStale={isStale}
           dataSource={dataSource}
-          listWidth={listWidth}
-          detailWidth={detailWidth}
-          onListWidthChange={v => setListWidth(clamp(v, LIST_PANEL_MIN, LIST_PANEL_MAX))}
-          onDetailWidthChange={v => setDetailWidth(clamp(v, DETAIL_PANEL_MIN, DETAIL_PANEL_MAX))}
+          isConstrained={constrainedMode}
         />
       <div role="status" aria-live="assertive" aria-atomic="true" style={{
           flex: 1, display: 'flex', flexDirection: 'column',
@@ -125,10 +162,7 @@ export default function App() {
         lastUpdated={lastUpdated}
         isStale={isStale}
         dataSource={dataSource}
-        listWidth={listWidth}
-        detailWidth={detailWidth}
-        onListWidthChange={v => setListWidth(clamp(v, LIST_PANEL_MIN, LIST_PANEL_MAX))}
-        onDetailWidthChange={v => setDetailWidth(clamp(v, DETAIL_PANEL_MIN, DETAIL_PANEL_MAX))}
+        isConstrained={constrainedMode}
       />
 
       {/* main-layout is position:relative so the detail overlay can be absolute */}
@@ -145,11 +179,12 @@ export default function App() {
 
         {/* Map always fills remaining space — NEVER resizes when panel opens */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
-            <FlightMap
+          <FlightMap
             flights={flights}
             selectedFlight={selectedFlight}
             onSelect={handleSelect}
             track={selectedFlight ? track : null}
+            detailPanelWidth={selectedFlight ? detailWidth : 0}
           />
         </div>
 
@@ -166,7 +201,7 @@ export default function App() {
               autoFocusCloseButton
               onTrackLoad={setTrack}
               lastUpdated={lastUpdated}
-              refreshMs={pollMs}
+              refreshMs={detailRefreshMs}
             />
           )}
         </div>

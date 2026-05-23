@@ -21,7 +21,13 @@ function withAlpha(rgb, alpha) {
   return `rgba(${rgb}, ${alpha})`
 }
 
-export default function FlightMap({ flights, selectedFlight, onSelect, track }) {
+export default function FlightMap({
+  flights,
+  selectedFlight,
+  onSelect,
+  track,
+  detailPanelWidth = 0,
+}) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
@@ -273,8 +279,6 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat([selected.longitude, selected.latitude])
       .addTo(mapRef.current)
-
-    // Selection should not hijack camera; keep runway framing stable.
   }, [selectedIcao, mapReady, theme.cyanAlt])
 
   // Update pulse ring position as plane moves
@@ -282,6 +286,27 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     if (!pulseMarkerRef.current || selectedLng == null || selectedLat == null) return
     pulseMarkerRef.current.setLngLat([selectedLng, selectedLat])
   }, [selectedIcao, selectedLng, selectedLat])
+
+  // Keep selected aircraft centered in the *viewable* map area (ignoring open detail overlay).
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    if (selectedLng == null || selectedLat == null) return
+
+    const map = mapRef.current
+    const canvasWidth = map.getCanvas().clientWidth
+    if (!canvasWidth) return
+
+    const insetPx = Math.max(0, Number(detailPanelWidth) || 0)
+    const mapShift = Math.max(0, Math.min(insetPx / 2, canvasWidth / 2 - 16))
+    const selectedPoint = map.project([selectedLng, selectedLat])
+    const nextCenter = map.unproject([selectedPoint.x + mapShift, selectedPoint.y])
+
+    map.easeTo({
+      center: nextCenter,
+      duration: 450,
+      essential: true,
+    })
+  }, [detailPanelWidth, mapReady, selectedIcao, selectedLat, selectedLng])
 
   // Draw flight path
   useEffect(() => {
@@ -398,14 +423,14 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         </div>
       )}
 
-      {/* Reset view button */}
+      {/* Back to JFK button */}
       <button
         onClick={resetView}
         type="button"
-        aria-label="Reset map to JFK runway view"
-        title="Reset to JFK runway view"
+        aria-label="Back to JFK runway view"
+        title="Back to JFK"
         style={{
-          position: 'absolute', bottom: 44, right: 12,
+          position: 'absolute', bottom: 12, left: 12,
           zIndex: 10,
           background: 'var(--panel-overlay-soft)',
           border: '1px solid rgba(var(--cyan-alt-rgb), 0.2)',
@@ -423,7 +448,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
         onMouseEnter={e => { e.currentTarget.style.color = 'rgba(var(--cyan-alt-rgb), 1)'; e.currentTarget.style.borderColor = 'rgba(var(--cyan-alt-rgb), 0.4)' }}
         onMouseLeave={e => { e.currentTarget.style.color = 'rgba(var(--cyan-alt-rgb), 0.7)'; e.currentTarget.style.borderColor = 'rgba(var(--cyan-alt-rgb), 0.2)' }}
       >
-        ⊕ JFK VIEW
+        BACK TO JFK
       </button>
 
       {/* Legend */}

@@ -3,11 +3,6 @@ import { weatherCodeToCondition, estimateActiveRunways } from '../api/weather'
 import { headingToCardinal } from '../utils/geo'
 import ApiStatusIndicator from './ApiStatusIndicator'
 
-const LIST_MIN = 320
-const LIST_MAX = 560
-const DETAIL_MIN = 420
-const DETAIL_MAX = 760
-
 function Clock() {
   const [time, setTime] = useState(new Date())
   useEffect(() => {
@@ -67,33 +62,6 @@ function DataSourceBadge({ dataSource }) {
   )
 }
 
-function PanelControl({ label, min, max, value, onChange }) {
-  const controlId = `${label.toLowerCase()}-slider`
-  return (
-    <label style={{
-      display: 'grid',
-      gridTemplateColumns: '52px minmax(120px, 180px) 38px',
-      alignItems: 'center',
-      gap: 8,
-      fontSize: 12,
-      color: 'var(--text-dim)',
-    }}>
-      <span>{label}</span>
-      <input
-        id={controlId}
-        aria-label={`${label} panel width in px`}
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        style={{ accentColor: 'var(--cyan)', cursor: 'ew-resize' }}
-      />
-      <span style={{ color: 'var(--heading)', textAlign: 'right', fontFeatureSettings: '"tnum"' }}>{value}</span>
-    </label>
-  )
-}
-
 export default function HUDBar({
   flights,
   weather,
@@ -102,10 +70,7 @@ export default function HUDBar({
   lastUpdated,
   isStale,
   dataSource,
-  listWidth,
-  detailWidth,
-  onListWidthChange,
-  onDetailWidthChange,
+  isConstrained,
 }) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
@@ -160,26 +125,22 @@ export default function HUDBar({
           {weather && runways.length > 0 && <HUDStat label="Runways" value={runways.join(' · ')} color="var(--amber)" />}
         </div>
 
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isConstrained && (
+            <div style={{
+              border: '1px solid rgba(var(--cyan-rgb), 0.35)',
+              color: 'var(--cyan)',
+              borderRadius: 999,
+              padding: '3px 9px',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 0.3,
+            }}>
+              AUTO MODE
+            </div>
+          )}
           <Clock />
         </div>
-      </div>
-
-      <div className="hudbar-controls">
-        <PanelControl
-          label="Traffic"
-          min={LIST_MIN}
-          max={LIST_MAX}
-          value={listWidth}
-          onChange={onListWidthChange}
-        />
-        <PanelControl
-          label="Detail"
-          min={DETAIL_MIN}
-          max={DETAIL_MAX}
-          value={detailWidth}
-          onChange={onDetailWidthChange}
-        />
       </div>
     </div>
   )
