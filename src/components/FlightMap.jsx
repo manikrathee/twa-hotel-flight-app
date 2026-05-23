@@ -217,7 +217,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       map.remove()
       mapRef.current = null
     }
-  }, [])
+  }, [theme.cyan, theme.cyanAlt, theme.redAlt, theme.textSoft])
 
   // Update plane positions — incremental updateData() after first load
   useEffect(() => {
@@ -267,7 +267,7 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       .addTo(mapRef.current)
 
     // Selection should not hijack camera; keep runway framing stable.
-  }, [selectedFlight?.icao24, mapReady])
+  }, [selectedIcao, mapReady, theme.cyanAlt])
 
   // Update pulse ring position as plane moves
   useEffect(() => {
