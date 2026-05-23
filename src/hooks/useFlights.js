@@ -39,6 +39,8 @@ function sameFlightSnapshot(left, right) {
     left.geo_altitude === right.geo_altitude &&
     left.distKm === right.distKm &&
     left.squawk === right.squawk &&
+    left.spi === right.spi &&
+    left.position_source === right.position_source &&
     left.last_contact === right.last_contact &&
     left.time_position === right.time_position &&
     left.origin_country === right.origin_country &&
@@ -299,7 +301,7 @@ export default function useFlights(selectedIcao = null) {
   const [rateLimitStatus, setRateLimitStatus] = useState('ok')   // 'ok' | 'blocked'
   const [backoffUntil, setBackoffUntil]     = useState(null)
   const [isStale, setIsStale]               = useState(false)
-  const [dataSource, setDataSource]         = useState(null)     // null | { type: 'live' } | { type: 'cache', cachedAt }
+  const [dataSource, setDataSource]         = useState(null)     // null | { type: 'live' } | { type: 'cache', cachedAt } | { type: 'mock', cachedAt }
   const [isConstrained, setIsConstrained]   = useState(false)
 
   const timerRef   = useRef(null)
@@ -338,6 +340,36 @@ export default function useFlights(selectedIcao = null) {
       setIsConstrained(shouldConstrain)
       const filtered = await enrichFlights(raw, { constrained: shouldConstrain })
       if (!mountedRef.current) return
+
+      if (!filtered.length) {
+        try {
+          const cached = await fetchCachedFlights()
+          const fallback = cached?.flights ? await enrichFlights(cached.flights, { constrained: true }) : []
+          if (!mountedRef.current) return
+          latestRef.current = fallback
+          if (hasFlightsChanged(flightsRef.current, fallback)) {
+            setFlights(fallback)
+            flightsRef.current = fallback
+          } else {
+            flightsRef.current = fallback
+          }
+          setDataSource({
+            type: cached?.cacheSource === 'mock' ? 'mock' : 'cache',
+            cachedAt: cached?.cachedAt,
+            cacheSource: cached?.cacheSource,
+          })
+          setError(cached?.cacheSource === 'mock' ? 'No live JFK traffic received - showing simulation' : null)
+          setRateLimitStatus('ok')
+          setBackoffUntil(null)
+          setIsConstrained(true)
+          scheduleNext(pollMs)
+          return
+        } catch {
+          setError('No live JFK traffic received')
+          scheduleNext(pollMs)
+          return
+        }
+      }
 
       latestRef.current = filtered
 
@@ -388,7 +420,12 @@ export default function useFlights(selectedIcao = null) {
           } else {
             flightsRef.current = filtered
           }
-          setDataSource({ type: 'cache', cachedAt: cached.cachedAt })
+          setDataSource({
+            type: cached.cacheSource === 'mock' ? 'mock' : 'cache',
+            cachedAt: cached.cachedAt,
+            cacheSource: cached.cacheSource,
+          })
+          if (cached.cacheSource === 'mock') setError('Live source blocked - showing simulation')
           evictRouteCache()
           // Don't update lastUpdated — the stale timer should fire normally
         }

@@ -4,6 +4,10 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { INITIAL_VIEW, JFK_RUNWAYS, MAP_STYLE, RUNWAY_LABELS, TWA_HOTEL } from './flightMapConfig'
 import { buildPlaneFeatures, buildPlaneSourceDiff, createPlaneImageData, getTrackCoordinates } from './flightMapHelpers'
 import { bearingDeg, distanceKm } from '../utils/geo'
+import { JFK } from '../config/airspace'
+
+const JFK_LNGLAT = [JFK.lon, JFK.lat]
+const KM_APPROACH = 16
 
 const FALLBACK_THEME = {
   cyanRgb: '112, 201, 227',
@@ -120,6 +124,42 @@ function withAlpha(rgb, alpha) {
   return `rgba(${rgb}, ${alpha})`
 }
 
+function jfkMarkerNode() {
+  const el = document.createElement('div')
+  el.className = 'jfk-airport-marker'
+  el.innerHTML = `
+    <div class="jfk-airport-pin">
+      <span>JFK</span>
+    </div>
+    <div class="jfk-airport-card">
+      <div class="jfk-airport-kicker">AIRPORT MARKER</div>
+      <div class="jfk-airport-title">KJFK <span>JFK</span></div>
+      <div class="jfk-airport-name">John F. Kennedy International</div>
+      <div class="jfk-airport-grid">
+        <div><strong data-jfk-traffic>0</strong><span>Aircraft</span></div>
+        <div><strong data-jfk-approach>0</strong><span>Approach &lt;10mi</span></div>
+        <div><strong>14,511</strong><span>Longest(ft)</span></div>
+        <div><strong>2</strong><span>Parallel pairs</span></div>
+      </div>
+      <div class="jfk-airport-pavement">
+        <span>Pavement ID on highlighted runways</span>
+        <div class="jfk-pavement-row concrete"><b>CONC</b><strong>04L/22R · 13L/31R · 13R/31L</strong></div>
+        <div class="jfk-pavement-row asphalt"><b>ASPH</b><strong>04R/22L</strong></div>
+      </div>
+    </div>
+  `
+  return el
+}
+
+function updateJfkMarker(el, flights) {
+  if (!el) return
+  const traffic = flights.filter(f => Number.isFinite(Number(f.latitude)) && Number.isFinite(Number(f.longitude))).length
+  const approach = flights.filter(f => Number(f.distKm) < KM_APPROACH).length
+  el.querySelector('[data-jfk-traffic]').textContent = traffic
+  el.querySelector('[data-jfk-approach]').textContent = approach
+  el.classList.toggle('has-approach', approach > 0)
+}
+
 export default function FlightMap({
   flights,
   selectedFlight,
@@ -136,6 +176,7 @@ export default function FlightMap({
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
+  const jfkMarkerRef = useRef(null)
   const onHistorySelectRef = useRef(null)
   const prevIcaoSetRef = useRef(null)
   const onRunwaySelectRef = useRef(onRunwaySelect)
@@ -200,7 +241,12 @@ export default function FlightMap({
         source: 'runways',
         layout: { 'line-cap': 'square' },
         paint: {
-          'line-color': withAlpha(theme.cyanAlt, 0.2),
+          'line-color': [
+            'match',
+            ['get', 'surface'],
+            'ASPH', withAlpha(theme.amber, 0.72),
+            withAlpha(theme.cyanAlt, 0.24),
+          ],
           'line-width': 16,
         },
       })
@@ -346,6 +392,15 @@ export default function FlightMap({
           .setText('TWA Hotel · KJFK'))
         .addTo(map)
 
+      const jfkEl = jfkMarkerNode()
+      jfkMarkerRef.current = {
+        marker: new maplibregl.Marker({ element: jfkEl, anchor: 'bottom', offset: [0, -18] })
+          .setLngLat(JFK_LNGLAT)
+          .addTo(map),
+        el: jfkEl,
+      }
+      updateJfkMarker(jfkEl, [])
+
       // ── Hover tooltip popup ──────────────────────────────────────────
       const hoverPopup = new maplibregl.Popup({
         closeButton: false,
@@ -433,10 +488,12 @@ export default function FlightMap({
 
     return () => {
       isLoadedRef.current = false
+      jfkMarkerRef.current?.marker.remove()
+      jfkMarkerRef.current = null
       map.remove()
       mapRef.current = null
     }
-  }, [theme.cyan, theme.cyanAlt, theme.redAlt, theme.textSoft])
+  }, [theme.cyan, theme.cyanAlt, theme.redAlt, theme.amber, theme.textSoft])
 
   // Update plane positions — incremental updateData() after first load
   useEffect(() => {
@@ -446,6 +503,7 @@ export default function FlightMap({
     }
     const src = mapRef.current.getSource('planes')
     if (!src) return
+    updateJfkMarker(jfkMarkerRef.current?.el, flights)
 
     if (!flights.length) {
       if (prevIcaoSetRef.current?.size) {
@@ -610,6 +668,174 @@ export default function FlightMap({
           padding: 5px 10px !important;
           border-radius: 4px !important;
         }
+        .jfk-airport-marker {
+          position: relative;
+          width: 308px;
+          height: 282px;
+          pointer-events: none;
+          filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.48));
+        }
+        .jfk-airport-pin {
+          position: absolute;
+          left: 50%;
+          bottom: 0;
+          width: 42px;
+          height: 42px;
+          border-radius: 50% 50% 50% 7px;
+          transform: translateX(-50%) rotate(-45deg);
+          background: linear-gradient(135deg, rgba(8, 18, 28, 0.96), rgba(12, 38, 52, 0.96));
+          border: 1px solid rgba(var(--cyan-alt-rgb), 0.78);
+          box-shadow: 0 0 18px rgba(var(--cyan-alt-rgb), 0.34), inset 0 1px 0 rgba(255,255,255,0.18);
+        }
+        .jfk-airport-pin span {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          transform: rotate(45deg);
+          color: #dff8ff;
+          font-size: 11px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+        }
+        .jfk-airport-card {
+          position: absolute;
+          left: 50%;
+          bottom: 44px;
+          width: 308px;
+          transform: translateX(-50%);
+          padding: 14px;
+          border-radius: 14px;
+          background:
+            linear-gradient(180deg, rgba(9, 20, 32, 0.98), rgba(5, 12, 20, 0.94)),
+            radial-gradient(circle at 20% 10%, rgba(var(--cyan-alt-rgb), 0.18), transparent 45%);
+          border: 1px solid rgba(var(--cyan-alt-rgb), 0.42);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 20px 42px rgba(0,0,0,0.38);
+        }
+        .jfk-airport-card::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          bottom: -7px;
+          width: 14px;
+          height: 14px;
+          transform: translateX(-50%) rotate(45deg);
+          background: rgba(5, 12, 20, 0.9);
+          border-right: 1px solid rgba(var(--cyan-alt-rgb), 0.24);
+          border-bottom: 1px solid rgba(var(--cyan-alt-rgb), 0.24);
+        }
+        .jfk-airport-kicker {
+          color: rgba(var(--text-soft-rgb), 0.9);
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 1.4px;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+        .jfk-airport-title {
+          color: #eef8ff;
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: 0.3px;
+          line-height: 1;
+          margin-bottom: 5px;
+        }
+        .jfk-airport-title span {
+          margin-left: 8px;
+          padding-left: 9px;
+          border-left: 1px solid rgba(var(--cyan-alt-rgb), 0.35);
+          color: var(--cyan);
+        }
+        .jfk-airport-name {
+          color: rgba(238,248,255,0.72);
+          font-size: 12px;
+          line-height: 1.2;
+          margin-bottom: 13px;
+        }
+        .jfk-airport-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+        .jfk-airport-grid div {
+          min-width: 0;
+          height: 66px;
+          border-radius: 9px;
+          padding: 9px 8px 8px;
+          background: rgba(255,255,255,0.055);
+          border: 1px solid rgba(255,255,255,0.085);
+          display: grid;
+          place-items: center;
+          align-content: center;
+          gap: 7px;
+          text-align: center;
+        }
+        .jfk-airport-grid span,
+        .jfk-airport-pavement > span {
+          color: rgba(var(--text-soft-rgb), 0.88);
+          font-size: 9.5px;
+          line-height: 1;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.7px;
+        }
+        .jfk-airport-grid strong {
+          color: #eef8ff;
+          font-size: 22px;
+          line-height: 1;
+          font-weight: 850;
+          letter-spacing: 0.2px;
+        }
+        .jfk-airport-pavement {
+          border-radius: 10px;
+          padding: 9px 10px;
+          background: rgba(var(--cyan-alt-rgb), 0.08);
+          border: 1px solid rgba(var(--cyan-alt-rgb), 0.16);
+          display: grid;
+          gap: 8px;
+        }
+        .jfk-pavement-row {
+          min-height: 32px;
+          border-radius: 8px;
+          display: grid;
+          grid-template-columns: 48px 1fr;
+          align-items: center;
+          gap: 9px;
+          padding: 6px 8px;
+          background: rgba(255,255,255,0.045);
+          border: 1px solid rgba(255,255,255,0.075);
+        }
+        .jfk-pavement-row b {
+          border-radius: 999px;
+          padding: 4px 0;
+          text-align: center;
+          font-size: 10px;
+          line-height: 1;
+          font-weight: 900;
+          letter-spacing: 0.7px;
+        }
+        .jfk-pavement-row strong {
+          color: rgba(238,248,255,0.92);
+          font-size: 12px;
+          line-height: 1.25;
+          font-weight: 760;
+          letter-spacing: 0.2px;
+        }
+        .jfk-pavement-row.concrete b {
+          color: #dff8ff;
+          background: rgba(var(--cyan-alt-rgb), 0.18);
+          border: 1px solid rgba(var(--cyan-alt-rgb), 0.28);
+        }
+        .jfk-pavement-row.asphalt b {
+          color: #ffe8bd;
+          background: rgba(var(--amber-rgb), 0.18);
+          border: 1px solid rgba(var(--amber-rgb), 0.32);
+        }
+        .jfk-airport-marker.has-approach .jfk-airport-pin {
+          border-color: rgba(var(--amber-rgb), 0.95);
+          box-shadow: 0 0 20px rgba(var(--amber-rgb), 0.34), inset 0 1px 0 rgba(255,255,255,0.18);
+        }
       `}</style>
 
       <div
@@ -679,68 +905,6 @@ export default function FlightMap({
         </div>
       )}
 
-      {/* Reset view button */}
-      <button
-        onClick={resetView}
-        type="button"
-        aria-label="Back to JFK runway view"
-        title="Back to JFK"
-        style={{
-          position: 'absolute', bottom: 12, left: 12,
-          zIndex: 10,
-          background: 'var(--panel-overlay-soft)',
-          border: '1px solid rgba(var(--cyan-alt-rgb), 0.2)',
-          borderRadius: 5,
-          color: 'rgba(var(--cyan-alt-rgb), 0.7)',
-          fontFamily: 'var(--font-display)',
-          fontSize: 11,
-          letterSpacing: 2,
-          padding: '5px 11px',
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-          transition: 'color 0.15s, border-color 0.15s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = 'rgba(var(--cyan-alt-rgb), 1)'; e.currentTarget.style.borderColor = 'rgba(var(--cyan-alt-rgb), 0.4)' }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'rgba(var(--cyan-alt-rgb), 0.7)'; e.currentTarget.style.borderColor = 'rgba(var(--cyan-alt-rgb), 0.2)' }}
-      >
-        BACK TO JFK
-      </button>
-
-      {/* Legend */}
-      <div style={{
-        position: 'absolute', bottom: 44, left: 12, zIndex: 10,
-        background: 'var(--panel-overlay)',
-        border: '1px solid rgba(var(--cyan-alt-rgb), 0.1)',
-        borderRadius: 5,
-        padding: '6px 10px',
-        backdropFilter: 'blur(10px)',
-        display: 'flex', flexDirection: 'column', gap: 5,
-        boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-      }}>
-        <Row color="var(--cyan-alt)" label="FLIGHT PATH" line />
-        {(timeline?.mode === 'timelapse' || timeline?.mode === 'history') && (
-          <Row color="var(--amber)" label="AIR TRAFFIC CONGESTION" circle />
-        )}
-        <Row color="var(--red-alt)" label="TWA HOTEL" dot />
-        <Row color="rgba(var(--text-soft-rgb), 0.4)" label="JFK RUNWAYS" line />
-      </div>
-    </div>
-  )
-}
-
-function Row({ color, label, line, dot }) {
-  const dotFill = color === 'var(--red-alt)'
-    ? 'rgba(var(--red-alt-rgb), 0.22)'
-    : color === 'var(--cyan-alt)'
-      ? 'rgba(var(--cyan-alt-rgb), 0.22)'
-      : 'rgba(var(--text-soft-rgb), 0.22)'
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-      {line && <div style={{ width: 16, height: 1.5, background: color, borderRadius: 1, opacity: 0.9 }} />}
-      {dot && <div style={{ width: 8, height: 8, borderRadius: '50%', border: `1.5px solid ${color}`, background: dotFill }} />}
-      <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', letterSpacing: 2, color: 'rgba(var(--text-soft-rgb), 0.9)' }}>{label}</span>
     </div>
   )
 }

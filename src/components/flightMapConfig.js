@@ -34,22 +34,22 @@ export const JFK_RUNWAYS = {
   features: [
     {
       type: 'Feature',
-      properties: { id: '04L/22R', width: 150 },
+      properties: { id: '04L/22R', width: 150, surface: 'CONC', lengthFt: 12079 },
       geometry: { type: 'LineString', coordinates: [[-73.7895, 40.6173], [-73.7648, 40.6652]] },
     },
     {
       type: 'Feature',
-      properties: { id: '04R/22L', width: 150 },
+      properties: { id: '04R/22L', width: 150, surface: 'ASPH', lengthFt: 8400 },
       geometry: { type: 'LineString', coordinates: [[-73.7841, 40.6169], [-73.7594, 40.6648]] },
     },
     {
       type: 'Feature',
-      properties: { id: '13L/31R', width: 200 },
+      properties: { id: '13L/31R', width: 200, surface: 'CONC', lengthFt: 10000 },
       geometry: { type: 'LineString', coordinates: [[-73.7973, 40.6556], [-73.7469, 40.626]] },
     },
     {
       type: 'Feature',
-      properties: { id: '13R/31L', width: 200 },
+      properties: { id: '13R/31L', width: 200, surface: 'CONC', lengthFt: 14511 },
       geometry: { type: 'LineString', coordinates: [[-73.8016, 40.6511], [-73.7592, 40.6225]] },
     },
   ],

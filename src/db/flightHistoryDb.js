@@ -186,7 +186,6 @@ export async function pruneOldSamples(retentionMs = MAX_HISTORY_MS) {
           resolve()
           return
         }
-        const { key } = c
         c.delete()
         c.continue()
       }

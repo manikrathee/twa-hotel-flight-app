@@ -174,7 +174,7 @@ export default function useFlightDetail(flight, preloadedTrack = null) {
 
     loadMissing()
     return () => { ignored = true; ctrl.abort() }
-  }, [icao24, callsign])
+  }, [icao24, callsign, preloadedTrack])
 
   useEffect(() => {
     if (!icao24 || !preloadedTrack) return

@@ -1,6 +1,7 @@
 import { record429, recordSuccess } from './rateLimitManager'
 import { getAccessToken, invalidateToken } from './openskyAuth'
 import { JFK_ONE_MILE_BBOX } from '../config/airspace'
+import { DEMO_FLIGHTS } from '../data/demoFlights'
 
 const BASE = '/api/opensky'
 
@@ -23,6 +24,8 @@ function parseStates(states) {
     vertical_rate:  s[11],  // m/s
     geo_altitude:   s[13],
     squawk:         s[14],
+    spi:            s[15],
+    position_source: s[16],
   }))
 }
 
@@ -62,17 +65,31 @@ export async function fetchFlights() {
 // Returns { flights, cachedAt } from the static DB-backed cache file.
 // The file is written by scripts/fetch-flights.js and served by Vite as a static asset.
 export async function fetchCachedFlights() {
-  const res = await fetch('/flights-cache.json', {
-    cache: 'no-store',
-    signal: AbortSignal.timeout(4000),
-  })
-  if (!res.ok) return null
-  const data = await res.json()
-  if (!data?.flights?.length) return null
-  return {
-    flights: data.flights,
-    cachedAt: new Date(data.fetchedAt),
-    cacheSource: data.source, // 'live' | 'mock'
+  try {
+    const res = await fetch('/flights-cache.json', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(4000),
+    })
+    if (!res.ok) {
+      return {
+        flights: DEMO_FLIGHTS.map(f => ({ ...f })),
+        cachedAt: new Date(),
+        cacheSource: 'mock',
+      }
+    }
+    const data = await res.json()
+    if (!data?.flights?.length) return null
+    return {
+      flights: data.flights,
+      cachedAt: new Date(data.fetchedAt),
+      cacheSource: data.source, // 'live' | 'mock'
+    }
+  } catch {
+    return {
+      flights: DEMO_FLIGHTS.map(f => ({ ...f })),
+      cachedAt: new Date(),
+      cacheSource: 'mock',
+    }
   }
 }
 

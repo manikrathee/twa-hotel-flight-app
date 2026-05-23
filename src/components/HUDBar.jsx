@@ -9,39 +9,35 @@ function Clock() {
     const id = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
-  const utc = time.toUTCString().slice(17, 25)
   const local = time.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
+    hour12: true,
     timeZone: 'America/New_York',
+    timeZoneName: 'short',
   })
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
       <span style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>
         {local}
       </span>
-      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{utc}Z</span>
     </div>
   )
 }
 
 function DataSourceBadge({ dataSource }) {
-  const cachedAtMs = dataSource?.cachedAt ? dataSource.cachedAt.getTime() : null
-  const [nowMs, setNowMs] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!cachedAtMs || dataSource?.type === 'live') return
-    const update = () => setNowMs(Date.now())
-    update()
-    const id = setInterval(update, 30000)
-    return () => clearInterval(id)
-  }, [cachedAtMs, dataSource?.type])
-
   if (!dataSource || dataSource.type === 'live') return null
-  const ago = cachedAtMs ? Math.round((nowMs - cachedAtMs) / 60000) : null
-  const label = ago !== null ? `DB CACHE · ${ago < 1 ? '<1' : ago}m ago` : 'DB CACHE'
+  const isMock = dataSource.type === 'mock' || dataSource.cacheSource === 'mock'
+  const stamp = dataSource.cachedAt
+    ? dataSource.cachedAt.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'America/New_York',
+      })
+    : null
+  const label = stamp ? `${isMock ? 'MOCK' : 'CACHE'} · ${stamp}` : (isMock ? 'MOCK' : 'CACHE')
   return (
     <div style={{
       display: 'flex',
@@ -203,7 +199,10 @@ export default function HUDBar({
   const runways = weather ? estimateActiveRunways(windDir) : []
   const airborne = flights.length
   const blocked = rateLimitStatus === 'blocked'
-  const feedLabel = blocked ? 'HOLD' : 'LIVE'
+  const sourceType = dataSource?.type || 'live'
+  const isLiveSource = sourceType === 'live' && !blocked
+  const feedLabel = isLiveSource ? 'LIVE' : sourceType === 'mock' ? 'MOCK' : 'CACHE'
+  const feedColor = isLiveSource ? 'var(--green)' : blocked ? 'var(--red)' : 'var(--amber)'
 
   return (
     <div className="hudbar">
@@ -221,11 +220,12 @@ export default function HUDBar({
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: blocked ? 'var(--red)' : 'var(--green)',
-            animation: 'pulse-dot 1.4s ease-in-out infinite',
-            boxShadow: blocked ? '0 0 8px var(--red)' : '0 0 8px var(--green)',
+            background: feedColor,
+            animation: isLiveSource ? 'pulse-dot 1.4s ease-in-out infinite' : 'none',
+            boxShadow: isLiveSource ? `0 0 8px ${feedColor}` : 'none',
+            opacity: isLiveSource ? 1 : 0.74,
           }} />
-          <span style={{ fontSize: 12, color: blocked ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
+          <span style={{ fontSize: 12, color: feedColor, fontWeight: 600 }}>
             {feedLabel}
           </span>
         </div>

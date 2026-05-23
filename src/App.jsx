@@ -16,7 +16,6 @@ const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.22, constrained: 0.18 }
 const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
 
 const MODE_LIVE = 'live'
-const MODE_HISTORY = 'history'
 const MODE_TIMELAPSE = 'timelapse'
 
 const HISTORY_WINDOWS = [
@@ -84,7 +83,7 @@ export default function App() {
   const selectedFlight = useMemo(() => {
     if (selectedSource === 'history') return selectedHistoryFlight || selectedLiveFlight || null
     return selectedLiveFlight || selectedHistoryFlight || null
-  }, [selectedId, selectedSource, selectedHistoryFlight, selectedLiveFlight])
+  }, [selectedSource, selectedHistoryFlight, selectedLiveFlight])
 
   const activeFlights = isHistoryMode ? history.activeFlights : flights
   const hasSelectedFlight = Boolean(selectedFlight)
@@ -185,17 +184,6 @@ export default function App() {
   }, [activateFlight, runwayAlert])
 
   const handleRunwayAlertDismiss = useCallback(() => setRunwayAlert(null), [])
-
-  useEffect(() => {
-    if (!runwayAlert) return
-    if (!runwayAlert.flightId || !runwayAlert.flightLabel) {
-      setRunwayAlert(null)
-      return
-    }
-    if (!flights.some(f => f.icao24 === runwayAlert.flightId)) {
-      setRunwayAlert(null)
-    }
-  }, [flights, runwayAlert])
 
   useEffect(() => {
     const onGlobalKeyDown = (event) => {

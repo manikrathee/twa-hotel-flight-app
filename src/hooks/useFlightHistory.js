@@ -112,7 +112,7 @@ function congestionPointsFromFlights(flights, gridStep = 0.1) {
 
   const features = []
 
-  for (const [_, value] of buckets) {
+  for (const value of buckets.values()) {
     features.push({
       type: 'Feature',
       properties: {
@@ -144,10 +144,10 @@ export default function useFlightHistory({
   const [samples, setSamples] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [range, setRange] = useState(null)
-  const [cursorMs, setCursorMs] = useState(Date.now())
+  const [cursorMs, setCursorMs] = useState(0)
   const [loadError, setLoadError] = useState(null)
   const timerRef = useRef(null)
-  const lastTickRef = useRef(Date.now())
+  const lastTickRef = useRef(0)
 
   const loadSamples = useCallback(async () => {
     if (!enabled || !windowMs) {
@@ -179,12 +179,20 @@ export default function useFlightHistory({
   }, [enabled, windowMs])
 
   useEffect(() => {
-    loadSamples()
-    if (!enabled) return
+    let cancelled = false
+    const runLoadSamples = () => {
+      if (!cancelled) void loadSamples()
+    }
 
-    const id = setInterval(loadSamples, REFRESH_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [enabled, loadSamples, refreshKey, windowMs])
+    Promise.resolve().then(runLoadSamples)
+    if (!enabled) return () => { cancelled = true }
+
+    const id = setInterval(runLoadSamples, REFRESH_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [enabled, loadSamples, refreshKey])
 
   useEffect(() => {
     if (!enabled || !isPlaying || !range?.startMs || !range?.endMs) return
@@ -224,8 +232,9 @@ export default function useFlightHistory({
     return out
   }, [groupedByIcao])
 
-  const cursorMsEffective = isPlaying ? cursorMs : (range?.endMs ?? Date.now())
-  const pathLimitMs = isPlaying ? cursorMsEffective : (range?.endMs ?? Date.now())
+  const rangeEndMs = range?.endMs ?? cursorMs
+  const cursorMsEffective = isPlaying ? cursorMs : rangeEndMs
+  const pathLimitMs = cursorMsEffective
 
   const activeFlights = useMemo(() => {
     if (!enabled || !range) return []
