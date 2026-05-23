@@ -27,13 +27,7 @@ export default function App() {
   const isInitialLoad = loading && !hasFlights
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
-
-  useEffect(() => {
-    if (selectedId && !selectedFlight) {
-      setSelectedId(null)
-      setTrack(null)
-    }
-  }, [selectedFlight, selectedId])
+  const effectiveSelectedId = selectedFlight ? selectedId : null
 
   const handleSelect = useCallback((icao24) => {
     setSelectedId(prev => {
@@ -50,7 +44,7 @@ export default function App() {
 
   useEffect(() => {
     const onGlobalKeyDown = (event) => {
-      if (event.key === 'Escape' && selectedId) {
+      if (event.key === 'Escape' && effectiveSelectedId) {
         event.preventDefault()
         handleClose()
         return
@@ -73,7 +67,7 @@ export default function App() {
 
     window.addEventListener('keydown', onGlobalKeyDown)
     return () => window.removeEventListener('keydown', onGlobalKeyDown)
-  }, [handleClose, selectedId])
+  }, [handleClose, effectiveSelectedId])
 
   if (error && flights.length === 0) {
     return (
@@ -141,7 +135,7 @@ export default function App() {
       <div className="main-layout">
         <NearbyList
           flights={flights}
-          selectedId={selectedId}
+          selectedId={effectiveSelectedId}
           onSelect={handleSelect}
           searchInputRef={searchInputRef}
           width={listWidth}
@@ -151,11 +145,11 @@ export default function App() {
 
         {/* Map always fills remaining space — NEVER resizes when panel opens */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
-          <FlightMap
+            <FlightMap
             flights={flights}
             selectedFlight={selectedFlight}
             onSelect={handleSelect}
-            track={track}
+            track={selectedFlight ? track : null}
           />
         </div>
 
@@ -166,7 +160,7 @@ export default function App() {
         >
           {selectedFlight && (
             <FlightDetail
-              key={selectedId}
+              key={selectedFlight?.icao24}
               flight={selectedFlight}
               onClose={handleClose}
               autoFocusCloseButton
