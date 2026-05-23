@@ -8,17 +8,27 @@ export default function useWeather() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let isActive = true
+
     async function load() {
       try {
         const data = await fetchWeather()
+        if (!isActive) return
         setWeather(data)
+        setError(null)
       } catch (e) {
+        if (!isActive) return
         setError(e.message)
       }
     }
+
     load()
+
     const id = setInterval(load, POLL_MS)
-    return () => clearInterval(id)
+    return () => {
+      isActive = false
+      clearInterval(id)
+    }
   }, [])
 
   return { weather, error }

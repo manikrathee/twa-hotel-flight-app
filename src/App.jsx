@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import HUDBar from './components/HUDBar'
 import FlightMap from './components/FlightMap'
 import NearbyList from './components/NearbyList'
@@ -26,6 +26,13 @@ export default function App() {
   const isInitialLoad = loading && !hasFlights
 
   const selectedFlight = flights.find(f => f.icao24 === selectedId) ?? null
+
+  useEffect(() => {
+    if (selectedId && !selectedFlight) {
+      setSelectedId(null)
+      setTrack(null)
+    }
+  }, [selectedFlight, selectedId])
 
   const handleSelect = useCallback((icao24) => {
     setSelectedId(prev => {
