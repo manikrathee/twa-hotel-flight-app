@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import HUDBar from './components/HUDBar'
 import FlightMap from './components/FlightMap'
 import NearbyList from './components/NearbyList'
@@ -20,6 +20,7 @@ export default function App() {
   const [track, setTrack] = useState(null)
   const [listWidth, setListWidth] = useState(390)
   const [detailWidth, setDetailWidth] = useState(560)
+  const searchInputRef = useRef(null)
   const { flights, loading, error, lastUpdated, rateLimitStatus, backoffUntil, isStale, dataSource, pollMs } = useFlights(selectedId)
   const { weather } = useWeather()
   const hasFlights = flights.length > 0
@@ -47,6 +48,33 @@ export default function App() {
     setTrack(null)
   }, [])
 
+  useEffect(() => {
+    const onGlobalKeyDown = (event) => {
+      if (event.key === 'Escape' && selectedId) {
+        event.preventDefault()
+        handleClose()
+        return
+      }
+
+      if (event.key !== '/') return
+      const active = document.activeElement
+      const isTyping =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement ||
+        active?.isContentEditable
+
+      if (isTyping) return
+
+      event.preventDefault()
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    }
+
+    window.addEventListener('keydown', onGlobalKeyDown)
+    return () => window.removeEventListener('keydown', onGlobalKeyDown)
+  }, [handleClose, selectedId])
+
   if (error && flights.length === 0) {
     return (
       <div className="app">
@@ -63,7 +91,7 @@ export default function App() {
           onListWidthChange={v => setListWidth(clamp(v, LIST_PANEL_MIN, LIST_PANEL_MAX))}
           onDetailWidthChange={v => setDetailWidth(clamp(v, DETAIL_PANEL_MIN, DETAIL_PANEL_MAX))}
         />
-      <div style={{
+      <div role="status" aria-live="assertive" aria-atomic="true" style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
@@ -115,6 +143,7 @@ export default function App() {
           flights={flights}
           selectedId={selectedId}
           onSelect={handleSelect}
+          searchInputRef={searchInputRef}
           width={listWidth}
           loading={loading}
           error={error}
@@ -140,6 +169,7 @@ export default function App() {
               key={selectedId}
               flight={selectedFlight}
               onClose={handleClose}
+              autoFocusCloseButton
               onTrackLoad={setTrack}
               lastUpdated={lastUpdated}
               refreshMs={pollMs}

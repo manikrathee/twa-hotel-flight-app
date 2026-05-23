@@ -66,7 +66,7 @@ function matchesSearch(flight, term) {
   return haystack.includes(term.toLowerCase())
 }
 
-function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
+function NearbyList({ flights, selectedId, onSelect, width, loading, error, searchInputRef }) {
   const deferredFlights = useDeferredValue(flights)
   const [sortBy, setSortBy] = useState('distance')
   const [sortAsc, setSortAsc] = useState(true)
@@ -132,14 +132,19 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
       </div>
 
       <div style={{ display: 'grid', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--panel-divider)' }}>
-        <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-dim)' }}>
-          <span>Find</span>
+        <label htmlFor="flight-search" style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-dim)' }}>
+          <span id="flight-search-help">Find</span>
           <input
+            id="flight-search"
+            ref={searchInputRef}
             type="text"
+            inputMode="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Callsign / ICAO / airline"
-            aria-label="Filter nearby flights"
+            placeholder="Search callsign, ICAO, airline"
+            aria-label="Search nearby flights by callsign, ICAO, or airline"
+            aria-describedby="flight-search-help"
+            autoComplete="off"
             style={{
               width: '100%',
               fontSize: 12,
@@ -158,7 +163,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value)}
-              aria-label="Sort nearby flights by"
+              aria-label={`Sort nearby flights by ${SORT_OPTIONS.find(option => option.id === sortBy)?.label || 'distance'}`}
               style={{
                 borderRadius: 5,
                 border: '1px solid var(--panel-border)',
@@ -174,11 +179,11 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
             </select>
           </label>
 
-          <button
-            type="button"
-            onClick={() => setSortAsc(s => !s)}
-            aria-pressed={sortAsc}
-            aria-label={`Sort direction ${sortAsc ? 'ascending' : 'descending'}`}
+            <button
+              type="button"
+              onClick={() => setSortAsc(s => !s)}
+              aria-pressed={sortAsc}
+              aria-label={`Sort direction ${sortAsc ? 'ascending' : 'descending'} for ${SORT_OPTIONS.find(option => option.id === sortBy)?.label || 'distance'}`}
               style={{
                 marginTop: 13,
                 borderRadius: 5,
@@ -237,7 +242,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
       {/* Flight list — grouped by proximity zone */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {totalShown === 0 && (
-          <div role="status" aria-live="polite" style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center' }}>
+          <div role="status" aria-live="polite" aria-atomic="true" style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center' }}>
             {showNoData ? 'No nearby traffic in range.' : emptyMessage}
           </div>
         )}

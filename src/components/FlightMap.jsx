@@ -306,6 +306,18 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
     mapRef.current?.flyTo({ ...INITIAL_VIEW, duration: 900, essential: true })
   }, [])
 
+  const onMapKeyDown = useCallback((event) => {
+    if (event.key === 'r' || event.key === 'R') {
+      event.preventDefault()
+      resetView()
+      return
+    }
+    if (event.key === 'Escape' && onSelectRef.current) {
+      event.preventDefault()
+      onSelectRef.current(null)
+    }
+  }, [resetView])
+
   return (
     <div style={{ flex: 1, width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
       <style>{`
@@ -343,7 +355,9 @@ export default function FlightMap({ flights, selectedFlight, onSelect, track }) 
       <div
         ref={containerRef}
         role="application"
-        aria-label="Live flight map around KJFK"
+        aria-label="Live flight map around KJFK. Press R to reset view, Escape to clear selected flight."
+        tabIndex={0}
+        onKeyDown={onMapKeyDown}
         style={{ width: '100%', height: '100%' }}
       />
 

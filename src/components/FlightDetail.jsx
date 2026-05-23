@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import useFlightDetail from '../hooks/useFlightDetail'
 import AircraftSilhouette from './AircraftSilhouette'
 import FlightPath from './FlightPath'
 import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
 import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
 
-export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated, refreshMs }) {
+export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated, refreshMs, autoFocusCloseButton }) {
+  const closeButtonRef = useRef(null)
   const { track, route, aircraftInfo, loading } = useFlightDetail(flight)
   const [showPath, setShowPath] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -16,6 +17,11 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
   }, [])
 
   useEffect(() => { onTrackLoad?.(track) }, [onTrackLoad, track])
+  useEffect(() => {
+    if (!autoFocusCloseButton) return
+    const timer = setTimeout(() => closeButtonRef.current?.focus(), 0)
+    return () => clearTimeout(timer)
+  }, [autoFocusCloseButton])
 
   const callsign = flight.callsign || flight.icao24
   const flightNum = parseFlightNumber(callsign)
@@ -106,6 +112,7 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, paddingTop: 2 }}>
           <button
             type="button"
+            ref={closeButtonRef}
             aria-label={`Close details for ${flightNum || callsign}`}
             onClick={onClose}
             style={{
@@ -332,12 +339,12 @@ export default function FlightDetail({ flight, onClose, onTrackLoad, lastUpdated
               </div>
             )}
             {showPath && !track && loading && (
-              <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+              <div role="status" aria-live="polite" style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
                 Fetching path data…
               </div>
             )}
             {showPath && !track && !loading && (
-              <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+              <div role="status" aria-live="polite" aria-atomic="true" style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
                 No path data available
               </div>
             )}
