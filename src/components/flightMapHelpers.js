@@ -40,19 +40,31 @@ export function buildPlaneFeatures(flights, selectedIcao) {
 }
 
 export function buildPlaneSourceDiff(features, prevSet) {
-  const nextMap = new Map(features.map(f => [f.properties.icao24, f]))
-  const add = features.filter(f => !prevSet.has(f.properties.icao24))
-  // updateData requires GeoJSONFeatureDiff shape for update entries.
-  const update = features
-    .filter(f => prevSet.has(f.properties.icao24))
-    .map(f => ({
-      id: f.properties.icao24,
-      newGeometry: f.geometry,
-      addOrUpdateProperties: Object.entries(f.properties).map(([key, value]) => ({ key, value })),
-    }))
-  const remove = [...prevSet].filter(id => !nextMap.has(id))
+  const nextSet = new Set()
+  const add = []
+  const update = []
 
-  return { add, update, remove, nextSet: new Set(nextMap.keys()) }
+  // updateData requires GeoJSONFeatureDiff shape for update entries.
+  for (const f of features) {
+    const id = f.properties.icao24
+    nextSet.add(id)
+    if (prevSet.has(id)) {
+      update.push({
+        id,
+        newGeometry: f.geometry,
+        addOrUpdateProperties: Object.entries(f.properties).map(([key, value]) => ({ key, value })),
+      })
+    } else {
+      add.push(f)
+    }
+  }
+
+  const remove = []
+  for (const id of prevSet) {
+    if (!nextSet.has(id)) remove.push(id)
+  }
+
+  return { add, update, remove, nextSet }
 }
 
 export function getTrackCoordinates(track, cutoffSec) {

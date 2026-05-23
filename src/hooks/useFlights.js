@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchFlights, fetchCachedFlights } from '../api/opensky'
 import { fetchCallsignRoute } from '../api/adsbdb'
 import { isBlocked, backoffRemainingMs } from '../api/rateLimitManager'
-import { distanceKm, distanceMiles } from '../utils/geo'
+import { distanceKm } from '../utils/geo'
 import { flightCache } from '../cache/flightCache'
 import { JFK, TWA_HOTEL, TWA_VISIBLE_RADIUS_MI, routeTouchesJfk } from '../config/airspace'
 
@@ -12,6 +12,7 @@ const SELECTED_POLL_ANON_MS = 10_000
 const STALE_SHOW_MS         = 90_000  // show stale badge after 90s without a fresh update
 const HAS_OPENSKY_AUTH      = Boolean(import.meta.env.VITE_OPENSKY_CLIENT_ID)
 const ROUTE_TTL_MS          = 20 * 60 * 1000
+const TWA_VISIBLE_RADIUS_KM = TWA_VISIBLE_RADIUS_MI / 0.621371
 
 const routeCache = new Map()
 const inFlightRouteLookup = new Map()
@@ -69,12 +70,23 @@ async function resolveRoute(callsign) {
 }
 
 async function enrichFlights(raw) {
-  const airborne = raw
+  const candidates = raw
     .filter(f => !f.on_ground && f.latitude != null && f.longitude != null)
-  if (!airborne.length) return []
+    .map(f => {
+      const distToTwaKm = distanceKm(TWA_HOTEL.lat, TWA_HOTEL.lon, f.latitude, f.longitude)
+      if (distToTwaKm > TWA_VISIBLE_RADIUS_KM) return null
+
+      return {
+        ...f,
+        distKm: distanceKm(JFK.lat, JFK.lon, f.latitude, f.longitude),
+      }
+    })
+    .filter(Boolean)
+
+  if (!candidates.length) return []
 
   const callsigns = [...new Set(
-    airborne
+    candidates
       .map(f => normalizeCallsign(f.callsign))
       .filter(Boolean)
   )]
@@ -84,15 +96,13 @@ async function enrichFlights(raw) {
   )
   const routeByCallsign = new Map(routePairs)
 
-  return airborne
+  return candidates
     .filter(f => {
       const callsign = normalizeCallsign(f.callsign)
       if (!callsign) return false
       const route = routeByCallsign.get(callsign)
-      if (!routeTouchesJfk(route)) return false
-      return distanceMiles(TWA_HOTEL.lat, TWA_HOTEL.lon, f.latitude, f.longitude) <= TWA_VISIBLE_RADIUS_MI
+      return routeTouchesJfk(route)
     })
-    .map(f => ({ ...f, distKm: f.distKm ?? distanceKm(JFK.lat, JFK.lon, f.latitude, f.longitude) }))
     .sort((a, b) => a.distKm - b.distKm)
 }
 
