@@ -24,6 +24,23 @@ function resolveThemeRGB(cssVar, fallback) {
 }
 
 const EMPTY_GEOJSON = { type: 'FeatureCollection', features: [] }
+function normalizeCoordinate(value) {
+  if (value === null || value === undefined) return null
+  const raw = typeof value === 'string' ? value.trim() : value
+  if (raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+function normalizeLngLat(lng, lat) {
+  const normalizedLng = normalizeCoordinate(lng)
+  const normalizedLat = normalizeCoordinate(lat)
+  if (normalizedLng == null || normalizedLat == null) return null
+
+  const wrappedLng = (((normalizedLng + 180) % 360) + 360) % 360 - 180
+  const clampedLat = Math.max(-89.999999, Math.min(89.999999, normalizedLat))
+  return [wrappedLng, clampedLat]
+}
 
 const RUNWAY_INCOMING = {
   maxLineDistanceKm: 1.55,
@@ -175,12 +192,19 @@ function resolveSelectedCoords(map, selectedIcao) {
     if (!featureIcao || featureIcao !== target) continue
 
     const coords = feature.geometry?.coordinates
-    if (!coords || !Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) continue
+    const normalized = normalizeLngLat(coords[0], coords[1])
+    if (!normalized) continue
 
-    return [Number(coords[0]), Number(coords[1])]
+    return normalized
   }
 
   return null
+}
+
+function resolvePulseCoords(map, selectedIcao, selectedLng, selectedLat) {
+  const fromMap = resolveSelectedCoords(map, selectedIcao)
+  if (fromMap) return fromMap
+  return normalizeLngLat(selectedLng, selectedLat)
 }
 export default function FlightMap({
   flights,
@@ -202,6 +226,7 @@ export default function FlightMap({
   const onHistorySelectRef = useRef(null)
   const prevIcaoSetRef = useRef(null)
   const onRunwaySelectRef = useRef(onRunwaySelect)
+  const followTargetRef = useRef({ icao: null, coords: null, shiftPx: 0 })
   const flightsRef = useRef(flights)
   const onSelectRef = useRef(onSelect)
   const [mapReady, setMapReady] = useState(false)
@@ -210,9 +235,10 @@ export default function FlightMap({
     const target = normalizeFlightId(selectedFlight.icao24)
     return flights.find(f => normalizeFlightId(f.icao24) === target) || null
   }, [flights, selectedFlight])
-  const selectedIcao = selectedFlightForMap?.icao24 ?? null
-  const selectedLng = selectedFlightForMap?.longitude
-  const selectedLat = selectedFlightForMap?.latitude
+  const selectedFlightForTracking = selectedFlightForMap || selectedFlight
+  const selectedIcao = selectedFlightForTracking?.icao24 ?? null
+  const selectedLng = selectedFlightForTracking?.longitude
+  const selectedLat = selectedFlightForTracking?.latitude
   const theme = {
     cyan: resolveThemeRGB('--cyan-rgb', FALLBACK_THEME.cyanRgb),
     cyanAlt: resolveThemeRGB('--cyan-alt-rgb', FALLBACK_THEME.cyanAltRgb),
@@ -576,13 +602,8 @@ export default function FlightMap({
     pulseMarkerRef.current = null
     if (!mapReady || !mapRef.current || !selectedIcao) return
 
-    const selectedFeatureCoords = resolveSelectedCoords(mapRef.current, selectedIcao)
-    const directCoords = [selectedLng, selectedLat]
-    const sourceLng = selectedFeatureCoords?.[0]
-    const sourceLat = selectedFeatureCoords?.[1]
-    const lng = Number.isFinite(sourceLng) ? sourceLng : Number(directCoords[0])
-    const lat = Number.isFinite(sourceLat) ? sourceLat : Number(directCoords[1])
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
+    const coords = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
+    if (!coords) return
 
     const el = document.createElement('div')
     el.style.cssText = [
@@ -593,7 +614,7 @@ export default function FlightMap({
       'pointer-events:none',
     ].join(';')
     pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([lng, lat])
+      .setLngLat(coords)
       .addTo(mapRef.current)
   }, [selectedIcao, mapReady, theme.cyanAlt, selectedLat, selectedLng])
 
@@ -601,28 +622,36 @@ export default function FlightMap({
   useEffect(() => {
     if (!pulseMarkerRef.current || !mapRef.current || !selectedIcao) return
 
-    const selectedFeatureCoords = resolveSelectedCoords(mapRef.current, selectedIcao)
-    const sourceLng = selectedFeatureCoords?.[0]
-    const sourceLat = selectedFeatureCoords?.[1]
-    const lng = Number.isFinite(sourceLng) ? sourceLng : Number(selectedLng)
-    const lat = Number.isFinite(sourceLat) ? sourceLat : Number(selectedLat)
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
+    const coords = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
+    if (!coords) return
 
-    pulseMarkerRef.current.setLngLat([lng, lat])
+    pulseMarkerRef.current.setLngLat(coords)
   }, [selectedIcao, selectedLng, selectedLat])
 
   // Keep selected aircraft centered in the *viewable* map area (ignoring open detail overlay).
   useEffect(() => {
-    if (!mapReady || !mapRef.current) return
-    if (selectedLng == null || selectedLat == null) return
+    if (!mapReady || !mapRef.current || !selectedIcao) return
+    const coords = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
+    if (!coords) return
 
     const map = mapRef.current
+    const isCurrentFlight = followTargetRef.current.icao === selectedIcao
+    const previousCoords = followTargetRef.current.coords
+    const previousShift = followTargetRef.current.shiftPx
     const canvasWidth = map.getCanvas().clientWidth
     if (!canvasWidth) return
 
     const insetPx = Math.max(0, Number(detailPanelWidth) || 0)
     const mapShift = Math.max(0, Math.min(insetPx / 2, canvasWidth / 2 - 16))
-    const selectedPoint = map.project([selectedLng, selectedLat])
+
+    const movedKm = previousCoords ? distanceKm(previousCoords[1], previousCoords[0], coords[1], coords[0]) : Infinity
+    const panelShiftChanged = previousShift !== mapShift
+    const bounds = map.getBounds()
+    const isOffscreen = bounds ? !bounds.contains(coords) : false
+
+    if (isCurrentFlight && !panelShiftChanged && !isOffscreen && movedKm < 0.30) return
+
+    const selectedPoint = map.project(coords)
     const nextCenter = map.unproject([selectedPoint.x + mapShift, selectedPoint.y])
 
     map.easeTo({
@@ -630,6 +659,12 @@ export default function FlightMap({
       duration: 450,
       essential: true,
     })
+
+    followTargetRef.current = {
+      icao: selectedIcao,
+      coords,
+      shiftPx: mapShift,
+    }
   }, [detailPanelWidth, mapReady, selectedIcao, selectedLat, selectedLng])
 
   // Draw flight path
@@ -638,26 +673,29 @@ export default function FlightMap({
     const src = mapRef.current.getSource('path')
     if (!src) return
 
-    if (!selectedFlightForMap || !track?.path?.length) {
+    if (!selectedIcao || !track?.path?.length) {
       src.setData({ type: 'FeatureCollection', features: [] })
       return
     }
 
     // Trim to last 90 minutes so a cross-country flight doesn't zoom out to the whole US
     const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 60
-    const coords = getTrackCoordinates(track, cutoffSec)
+    const recentCoords = getTrackCoordinates(track, cutoffSec)
+    const allCoords = recentCoords.length < 2
+      ? getTrackCoordinates(track, -1)
+      : recentCoords
 
-    if (coords.length < 2) {
+    if (allCoords.length < 2) {
       src.setData({ type: 'FeatureCollection', features: [] })
       return
     }
 
     src.setData({
       type: 'FeatureCollection',
-      features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }],
+      features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: allCoords } }],
     })
 
-  }, [track, mapReady, selectedFlightForMap])
+  }, [selectedIcao, track, mapReady])
 
   const resetView = useCallback(() => {
     mapRef.current?.flyTo({ ...INITIAL_VIEW, duration: 900, essential: true })
@@ -887,7 +925,7 @@ export default function FlightMap({
       />
 
       {/* Track mode banner */}
-      {track?.path?.length > 0 && selectedFlightForMap && (
+      {track?.path?.length > 0 && selectedFlightForTracking && (
         <div style={{
           position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
           zIndex: 10,
@@ -910,7 +948,7 @@ export default function FlightMap({
             VIEWING FLIGHT PATH
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(var(--cyan-alt-rgb), 0.55)', letterSpacing: 1 }}>
-            {(selectedFlightForMap.callsign || selectedFlightForMap.icao24).trim()} · LAST 90 MIN
+            {(selectedFlightForTracking.callsign || selectedFlightForTracking.icao24).trim()} · LAST 90 MIN
           </span>
         </div>
       )}

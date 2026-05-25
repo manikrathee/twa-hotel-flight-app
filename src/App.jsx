@@ -336,7 +336,7 @@ export default function App() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
           <FlightMap
             flights={activeFlights}
-            selectedFlight={selectedFlightForMap}
+            selectedFlight={selectedFlight}
             onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
             onHistorySelect={isHistoryMode ? handleHistorySelect : null}
             onRunwaySelect={handleRunwaySelection}
