@@ -1,12 +1,12 @@
 import { record429, recordSuccess } from './rateLimitManager'
 import { getAccessToken, invalidateToken } from './openskyAuth'
-import { JFK_ONE_MILE_BBOX } from '../config/airspace'
+import { JFK_AIRSPACE_BBOX } from '../config/airspace'
 
 const DEMO_FLIGHTS = []
 
 const BASE = '/api/opensky'
 
-const BBOX = JFK_ONE_MILE_BBOX
+const BBOX = JFK_AIRSPACE_BBOX
 
 function parseStates(states) {
   if (!Array.isArray(states)) return []

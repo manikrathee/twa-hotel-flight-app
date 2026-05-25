@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import Database from 'better-sqlite3'
-import { JFK, JFK_ONE_MILE_BBOX } from '../src/config/airspace.js'
+import { JFK, JFK_AIRSPACE_BBOX } from '../src/config/airspace.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT       = join(__dirname, '..')
@@ -22,7 +22,7 @@ const ENV_PATH   = join(ROOT, '.env.local')
 
 mkdirSync(join(ROOT, 'data'), { recursive: true })
 
-const BBOX = JFK_ONE_MILE_BBOX
+const BBOX = JFK_AIRSPACE_BBOX
 const TOKEN_URL  = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
 const STATES_URL = `https://opensky-network.org/api/states/all?lamin=${BBOX.lamin}&lomin=${BBOX.lomin}&lamax=${BBOX.lamax}&lomax=${BBOX.lomax}`
 
@@ -59,7 +59,7 @@ const latestSnapshot = db.prepare('SELECT * FROM snapshots ORDER BY fetched_at D
 function parseStates(states) {
   if (!Array.isArray(states)) return []
   return states
-    .filter(s => !s[8] && s[6] != null && s[5] != null)
+    .filter(s => s[6] != null && s[5] != null)
     .map(s => ({
       icao24:         s[0],
       callsign:      (s[1] || '').trim(),
@@ -69,7 +69,7 @@ function parseStates(states) {
       longitude:      s[5],
       latitude:       s[6],
       baro_altitude:  s[7],
-      on_ground:      false,
+      on_ground:      !!s[8],
       velocity:       s[9],
       heading:        s[10],
       vertical_rate:  s[11],
@@ -173,7 +173,9 @@ async function main() {
   const rawStates = isMock ? generateMock() : await fetchLive()
   const parsed    = parseStates(rawStates)
 
-  console.log(`[parse] ${parsed.length} airborne aircraft`)
+  const airborneCount = parsed.filter(f => !f.on_ground).length
+  const groundCount = parsed.length - airborneCount
+  console.log(`[parse] ${parsed.length} aircraft (${airborneCount} airborne, ${groundCount} on-ground)`)
 
   insertSnapshot.run(fetchedAt.getTime(), source, parsed.length, JSON.stringify(parsed))
   console.log(`[db] Snapshot saved → ${DB_PATH}`)

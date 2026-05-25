@@ -9,6 +9,7 @@ import {
 import { fetchCallsignRoute } from '../api/adsbdb'
 import { isBlocked, backoffRemainingMs } from '../api/rateLimitManager'
 import { distanceKm } from '../utils/geo'
+import { buildPositionedSamples } from '../utils/flightSamples'
 import { flightCache } from '../cache/flightCache'
 import { recordFlightSamples } from '../db/flightHistoryDb'
 import { JFK, TWA_HOTEL, TWA_VISIBLE_RADIUS_MI, routeTouchesJfk } from '../config/airspace'
@@ -90,33 +91,6 @@ function isConnectionConstrained() {
   if (typeof conn.downlink === 'number' && conn.downlink > 0 && conn.downlink < 1.25) return true
   if (typeof conn.rtt === 'number' && conn.rtt > 900) return true
   return false
-}
-
-function normalizeFlightState(raw) {
-  const latitude = Number(raw.latitude)
-  const longitude = Number(raw.longitude)
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
-
-  const altitude = Number(raw.baro_altitude)
-  const verticalRate = Number(raw.vertical_rate)
-  const heading = Number(raw.heading)
-  const velocity = Number(raw.velocity)
-  const geoAltitude = Number(raw.geo_altitude)
-  const squawk = raw.squawk == null ? null : String(raw.squawk).trim()
-
-  return {
-    ...raw,
-    icao24: String(raw.icao24 || '').trim().toLowerCase(),
-    callsign: String(raw.callsign || '').trim(),
-    latitude,
-    longitude,
-    baro_altitude: Number.isFinite(altitude) ? altitude : null,
-    geo_altitude: Number.isFinite(geoAltitude) ? geoAltitude : null,
-    vertical_rate: Number.isFinite(verticalRate) ? verticalRate : null,
-    heading: Number.isFinite(heading) ? heading : null,
-    velocity: Number.isFinite(velocity) ? velocity : null,
-    squawk,
-  }
 }
 
 function flightFreshnessMs(flight) {
@@ -210,13 +184,6 @@ function evictRouteCache() {
   }
 }
 
-function buildAirborneSamples(raw) {
-  return raw
-    .map(normalizeFlightState)
-    .filter(Boolean)
-    .filter(f => !f.on_ground)
-}
-
 async function resolveRoute(callsign) {
   const key = normalizeCallsign(callsign)
   if (!key) return null
@@ -248,7 +215,7 @@ async function enrichFlights(raw, options = {}) {
   const { skipHotelFilter = false, skipRouteFilter = false } = options
   const { constrained } = options
 
-  const candidates = buildAirborneSamples(raw)
+  const candidates = buildPositionedSamples(raw)
     .map(f => {
       const distKm = distanceKm(JFK.lat, JFK.lon, f.latitude, f.longitude)
       if (skipHotelFilter) return { ...f, distKm }
@@ -394,18 +361,18 @@ export default function useFlights(selectedIcao = null) {
     fallbackProbeAtRef.current = 0
   }
 
-  const historySamples = buildAirborneSamples(raw)
-  if (historySamples.length) {
-    await recordFlightSamples(historySamples, Date.now())
+  const positionedSamples = buildPositionedSamples(raw)
+  if (positionedSamples.length) {
+    await recordFlightSamples(positionedSamples, Date.now())
   }
 
       const shouldConstrain = constrainedByConnection || raw.length > HIGH_DENSITY_FLIGHT_THRESHOLD
       setIsConstrained(shouldConstrain)
       const filtered = await enrichFlights(raw, { constrained: shouldConstrain })
-      const routeOnlyFallback = filtered.length === 0 && historySamples.length > 0
+      const routeOnlyFallback = filtered.length === 0 && positionedSamples.length > 0
         ? await enrichFlights(raw, { constrained: false, skipRouteFilter: true })
         : null
-      const routeAndHotelFallback = filtered.length === 0 && historySamples.length > 0
+      const routeAndHotelFallback = filtered.length === 0 && positionedSamples.length > 0
         ? await enrichFlights(raw, { constrained: false, skipHotelFilter: true, skipRouteFilter: true })
         : null
       const finalFiltered = routeOnlyFallback && routeOnlyFallback.length > 0
@@ -418,7 +385,7 @@ export default function useFlights(selectedIcao = null) {
       if (!finalFiltered.length) {
         try {
           const cached = await fetchCachedFlights()
-          const cachedSamples = buildAirborneSamples(cached?.flights || [])
+          const cachedSamples = buildPositionedSamples(cached?.flights || [])
           if (cachedSamples.length > 0) {
             await recordFlightSamples(cachedSamples, cached.cachedAt?.getTime() || Date.now())
           }
@@ -505,7 +472,7 @@ export default function useFlights(selectedIcao = null) {
         const cached = await fetchCachedFlights()
         if (cached && mountedRef.current) {
           setIsConstrained(true)
-          const cachedSamples = buildAirborneSamples(cached.flights)
+          const cachedSamples = buildPositionedSamples(cached.flights)
           await recordFlightSamples(cachedSamples, cached.cachedAt?.getTime() || Date.now())
 
           let filtered = await enrichFlights(cached.flights, { constrained: true })

@@ -1,4 +1,4 @@
-import { JFK_ONE_MILE_BBOX } from '../config/airspace'
+import { JFK_AIRSPACE_BBOX } from '../config/airspace'
 
 const FEED_CONFIG = {
   url: (import.meta.env.VITE_FALLBACK_FEED_URL || '').trim(),
@@ -8,7 +8,7 @@ const FEED_CONFIG = {
   fallbackToPrimaryIntervalMs: Number(import.meta.env.VITE_FALLBACK_PRIMARY_RETRY_MS || 45_000),
 }
 
-const BBOX = JFK_ONE_MILE_BBOX
+const BBOX = JFK_AIRSPACE_BBOX
 const MIN_TIMEOUT_MS = 2_000
 const MAX_TIMEOUT_MS = 30_000
 const MAX_ALTITUDE_M = 1_200_000

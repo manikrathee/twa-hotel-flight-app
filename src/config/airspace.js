@@ -26,11 +26,15 @@ export function bboxAround(center, radiusMiles) {
   }
 }
 
-export const JFK_ONE_MILE_BBOX = bboxAround(JFK, MAP_RADIUS_MI)
-export const JFK_ONE_MILE_MAX_BOUNDS = [
-  [JFK_ONE_MILE_BBOX.lomin, JFK_ONE_MILE_BBOX.lamin],
-  [JFK_ONE_MILE_BBOX.lomax, JFK_ONE_MILE_BBOX.lamax],
+export const JFK_AIRSPACE_BBOX = bboxAround(JFK, MAP_RADIUS_MI)
+export const JFK_AIRSPACE_MAX_BOUNDS = [
+  [JFK_AIRSPACE_BBOX.lomin, JFK_AIRSPACE_BBOX.lamin],
+  [JFK_AIRSPACE_BBOX.lomax, JFK_AIRSPACE_BBOX.lamax],
 ]
+
+// Backward compatibility aliases.
+export const JFK_ONE_MILE_BBOX = JFK_AIRSPACE_BBOX
+export const JFK_ONE_MILE_MAX_BOUNDS = JFK_AIRSPACE_MAX_BOUNDS
 
 function normAirport(code) {
   return String(code || '').trim().toUpperCase()

@@ -1,7 +1,8 @@
 # TWA Hotel Flight App
 
 Live traffic display constrained to the immediate JFK/TWA airspace:
-- 1-mile radius around JFK for map + OpenSky state query.
+- 12-mile radius around JFK for map + OpenSky state query.
+- Both airborne and on-ground positioned aircraft are considered for display.
 - Flights whose resolved route is to or from JFK.
 - Final display filtered to aircraft within visual range of the TWA Hotel.
 
@@ -40,8 +41,8 @@ Supplemental aircraft values are intentionally approximate operating context, no
 
 - Selecting an aircraft keeps the map camera in the current view (no automatic flight-path zoom/fly-to).
 - While an aircraft is selected, live telemetry refreshes faster:
-  - Authenticated OpenSky client: every 5 seconds
-  - Anonymous mode: every 10 seconds
+  - Authenticated OpenSky client: every 2.5 seconds
+  - Anonymous mode: every 5 seconds
 
 ## Development
 
