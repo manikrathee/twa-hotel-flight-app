@@ -70,6 +70,11 @@ The map is initialized once in a `useEffect`. Layer order from bottom:
 
 DOM markers (not map layers): runway threshold labels, TWA Hotel dot, pulse-ring on selected flight.
 
+### UX guardrails
+
+- Do not add large static location/airport cards on top of the map. They obstruct flight interactions and reduce map readability.
+- If location context is needed, use compact non-interactive markers on the map and put rich metadata in side panels (HUD/FlightDetail), not floating map cards.
+
 ### Supplemental data
 
 `src/data/aviationFacts.js` provides offline aircraft specs (`AIRCRAFT_FACTS` keyed by ICAO type code) and airline facts (`AIRLINE_FACTS` keyed by ICAO airline prefix). This supplements ADSBDB lookups and handles the common case where only a type code is known.
