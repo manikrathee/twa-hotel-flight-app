@@ -53,7 +53,6 @@ export default function FlightDetail({
   })
   const displayModel = model
   const registration = cleanText(aircraftInfo?.registration)
-  const photo = cleanText(aircraftInfo?.url_photo_thumbnail) || cleanText(aircraftInfo?.url_photo)
   const owner = cleanText(aircraftInfo?.registered_owner)
 
   const altFt      = metersToFeet(flight.baro_altitude)
@@ -91,7 +90,7 @@ export default function FlightDetail({
   const contactAgeSec = flight.last_contact
     ? Math.max(0, nowSec - flight.last_contact)
     : null
-  const sourceLabel = positionSourceLabel(flight.position_source)
+  const sourcePositionLabel = positionSourceLabel(flight.position_source)
   const statusLabel = flight.on_ground === true ? 'GROUND'
                     : flight.on_ground === false ? 'AIRBORNE'
                     : null
@@ -205,7 +204,7 @@ export default function FlightDetail({
           </div>
           {(refreshSec || updatedLabel) && (
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', letterSpacing: 0.8 }}>
-              {sourceLabel}
+          {sourcePositionLabel}
               {refreshSec ? ` · ${refreshSec}s refresh` : ''}
               {updatedLabel ? ` · ${updatedLabel}` : ''}
             </div>
@@ -290,7 +289,7 @@ export default function FlightDetail({
                 sub="transponder contact" color={ageColor(contactAgeSec)} />
             )}
             {sourceLabel && (
-              <BigStat label="SOURCE" value={sourceLabel}
+            <BigStat label="SOURCE" value={sourcePositionLabel}
                 sub="position source" color="var(--cyan)" />
             )}
           </div>
@@ -490,27 +489,6 @@ function routeDistanceMiles(origin, dest) {
   const vals = [origin.latitude, origin.longitude, dest.latitude, dest.longitude].map(Number)
   if (vals.some(v => !Number.isFinite(v))) return null
   return Math.round(distanceMiles(vals[0], vals[1], vals[2], vals[3]))
-}
-
-function routeProgress(origin, dest, flight, routeMiles) {
-  if (!origin || !dest) return null
-  if (flight.latitude == null || flight.longitude == null) return null
-  const remainingMi = Math.round(distanceMiles(flight.latitude, flight.longitude, dest.latitude, dest.longitude))
-  if (!routeMiles || !Number.isFinite(routeMiles)) {
-    return { remainingMi, flownMi: null, progress: null }
-  }
-  const flownMi = Math.round(distanceMiles(origin.latitude, origin.longitude, flight.latitude, flight.longitude))
-  const progress = Math.round(clamp01(flownMi / routeMiles) * 100)
-  return { remainingMi, flownMi, progress }
-}
-
-function uniqueCountries(values) {
-  const list = []
-  for (const value of values) {
-    const country = String(value || '').trim()
-    if (country && !list.includes(country)) list.push(country)
-  }
-  return list
 }
 
 function clamp01(value) {

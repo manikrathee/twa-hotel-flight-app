@@ -18,6 +18,7 @@ const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
 
 const MODE_LIVE = 'live'
 const MODE_TIMELAPSE = 'timelapse'
+const MODE_HISTORY = 'history'
 
 const HISTORY_WINDOWS = [
   { label: 'Last day', ms: 24 * 60 * 60 * 1000 },

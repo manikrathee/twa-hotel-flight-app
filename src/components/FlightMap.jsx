@@ -182,8 +182,6 @@ function resolveSelectedCoords(map, selectedIcao) {
 
   return null
 }
-}
-
 export default function FlightMap({
   flights,
   selectedFlight,

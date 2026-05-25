@@ -388,14 +388,16 @@ export default function useFlights(selectedIcao = null) {
         throw fetchError || new Error('No live flight payload available')
       }
 
-      if (usedFallback) {
-        fallbackProbeAtRef.current = Date.now() + getFallbackFeedPrimaryRetryMs()
-      } else {
-        fallbackProbeAtRef.current = 0
-      const historySamples = buildAirborneSamples(raw)
-      if (historySamples.length) {
-        await recordFlightSamples(historySamples, Date.now())
-      }
+  if (usedFallback) {
+    fallbackProbeAtRef.current = Date.now() + getFallbackFeedPrimaryRetryMs()
+  } else {
+    fallbackProbeAtRef.current = 0
+  }
+
+  const historySamples = buildAirborneSamples(raw)
+  if (historySamples.length) {
+    await recordFlightSamples(historySamples, Date.now())
+  }
 
       const shouldConstrain = constrainedByConnection || raw.length > HIGH_DENSITY_FLIGHT_THRESHOLD
       setIsConstrained(shouldConstrain)

@@ -1,7 +1,8 @@
 import { record429, recordSuccess } from './rateLimitManager'
 import { getAccessToken, invalidateToken } from './openskyAuth'
 import { JFK_ONE_MILE_BBOX } from '../config/airspace'
-import { DEMO_FLIGHTS } from '../data/demoFlights'
+
+const DEMO_FLIGHTS = []
 
 const BASE = '/api/opensky'
 
