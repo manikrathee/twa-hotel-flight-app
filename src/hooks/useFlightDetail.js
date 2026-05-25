@@ -2,7 +2,13 @@ import { useEffect, useReducer } from 'react'
 import { fetchAircraftMeta, fetchTrack } from '../api/opensky'
 import { fetchCallsignRoute, fetchAircraftInfo } from '../api/adsbdb'
 import { flightCache } from '../cache/flightCache'
-import { recordTrackPoints } from '../db/flightHistoryDb'
+import { getRecentTrackForIcao, recordTrackPoints } from '../db/flightHistoryDb'
+
+const FALLBACK_TRACK_WINDOW_MS = (() => {
+  const configured = Number(import.meta.env.VITE_FALLBACK_TRACK_WINDOW_MS)
+  if (Number.isFinite(configured) && configured > 0) return configured
+  return 10 * 60 * 1000
+})()
 
 function initialDetailState() {
   return {
@@ -92,10 +98,13 @@ function isUsableText(value) {
   return !isPlaceholderText(value)
 }
 
-export default function useFlightDetail(flight, preloadedTrack = null) {
+export default function useFlightDetail(flight, preloadedTrack = null, options = {}) {
   const [state, dispatch] = useReducer(detailReducer, null, initialDetailState)
   const icao24 = flight?.icao24
   const callsign = flight?.callsign
+  const feedMode = options.feedMode || 'live'
+  const refreshKey = options.refreshKey
+  const isFallbackFeed = feedMode === 'fallback'
 
   useEffect(() => {
     let ignored = false
@@ -115,7 +124,7 @@ export default function useFlightDetail(flight, preloadedTrack = null) {
     if (seededTrack) dispatch({ type: 'setTrack', value: seededTrack })
     if (cachedAircraft) dispatch({ type: 'setAircraftInfo', value: cachedAircraft })
 
-    const needsTrack = !seededTrack
+    const needsTrack = !seededTrack || isFallbackFeed
     const needsAircraft = !hasUsableAircraftProfile(cachedAircraft)
 
     if (!needsTrack && !needsAircraft) {
@@ -136,18 +145,32 @@ export default function useFlightDetail(flight, preloadedTrack = null) {
       const tasks = []
 
       if (needsTrack) {
-        tasks.push(
-          fetchTrack(icao24, signal)
-            .then(d => {
-              if (ignored) return
-              if (d) {
-                flightCache.setTrack(icao24, d)
-                recordTrackPoints(icao24, d)
-              }
-              dispatch({ type: 'setTrack', value: d })
-            })
-            .catch(e => { if (e?.name !== 'AbortError' && !ignored) dispatch({ type: 'setTrack', value: null }) })
-        )
+        if (isFallbackFeed) {
+          tasks.push(
+            getRecentTrackForIcao(icao24, FALLBACK_TRACK_WINDOW_MS)
+              .then((d) => {
+                if (ignored) return
+                if (d) {
+                  flightCache.setTrack(icao24, d)
+                }
+                dispatch({ type: 'setTrack', value: d })
+              })
+              .catch(() => { if (!ignored) dispatch({ type: 'setTrack', value: null }) })
+          )
+        } else {
+          tasks.push(
+            fetchTrack(icao24, signal)
+              .then(d => {
+                if (ignored) return
+                if (d) {
+                  flightCache.setTrack(icao24, d)
+                  recordTrackPoints(icao24, d)
+                }
+                dispatch({ type: 'setTrack', value: d })
+              })
+              .catch(e => { if (e?.name !== 'AbortError' && !ignored) dispatch({ type: 'setTrack', value: null }) })
+          )
+        }
       }
 
       if (needsAircraft) {
@@ -179,7 +202,26 @@ export default function useFlightDetail(flight, preloadedTrack = null) {
 
     loadMissing()
     return () => { ignored = true; ctrl.abort() }
-  }, [icao24, callsign])
+  }, [icao24, callsign, preloadedTrack, isFallbackFeed])
+
+  useEffect(() => {
+    if (!isFallbackFeed || refreshKey == null || !icao24) return
+
+    let ignored = false
+
+    getRecentTrackForIcao(icao24, FALLBACK_TRACK_WINDOW_MS)
+      .then((d) => {
+        if (ignored) return
+        if (d) flightCache.setTrack(icao24, d)
+        dispatch({ type: 'setTrack', value: d })
+      })
+      .catch(() => {
+        if (ignored) return
+        dispatch({ type: 'setTrack', value: null })
+      })
+
+    return () => { ignored = true }
+  }, [isFallbackFeed, refreshKey, icao24])
 
   useEffect(() => {
     if (!icao24 || !preloadedTrack) return

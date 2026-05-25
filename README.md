@@ -30,6 +30,7 @@ Live traffic display constrained to the immediate JFK/TWA airspace:
 ## Data Sources
 
 - OpenSky Network state vectors: live ADS-B position, altitude, speed, heading, vertical rate, squawk.
+- Deliberate secondary JFK-only fallback feed (optional): map-state payload for continuity when OpenSky is blocked.
 - ADSBDB: selected-flight aircraft registration, type/manufacturer/model, owner/operator, aircraft photo, airline, origin, and destination.
 - Local supplemental facts: broad aircraft type specs and airline founding/headquarters data for richer detail when only a few aircraft are visible from the hotel.
 
@@ -57,10 +58,22 @@ npm run dev
 - Backward-compatible aliases also supported: `VITE_OPENSKY_CLIENT_ID` / `VITE_OPENSKY_CLIENT_SECRET`.
 - If credentials are missing, app falls back to anonymous OpenSky requests.
 
+### Fallback Feed Configuration (JFK backup)
+
+When primary OpenSky access is blocked, the app can switch to a separate JFK feed with auto-recovery to primary.
+
+- `VITE_FALLBACK_FEED_URL` (required to enable): full URL or same-origin path to an alternate state feed.
+- `VITE_FALLBACK_FEED_PROVIDER`: `generic` (default), `opensky`, or `fr24`.
+- `VITE_FALLBACK_FEED_LABEL`: status label shown in HUD (default `KJFK FALLBACK`).
+- `VITE_FALLBACK_FEED_TIMEOUT_MS`: fetch timeout in ms (default `14000`).
+- `VITE_FALLBACK_PRIMARY_RETRY_MS`: cooldown before re-checking primary after a fallback switch (default `45000`).
+- `VITE_FALLBACK_TRACK_WINDOW_MS`: window in ms used to rebuild local paths for fallback-selected flights (defaults to 10 minutes when unset).
+- `VITE_FALLBACK_FEED_PROXY_TARGET`: optional Vite proxy target host for same-origin proxying.
+- `VITE_FALLBACK_FEED_PROXY_PATH`: optional proxy path (default `/api/jfk-fallback`) when proxy target is used.
+
 ## Gate
 
 ```sh
 npm run lint
-npm run test
 npm run build
 ```

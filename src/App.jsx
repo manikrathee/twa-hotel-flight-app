@@ -3,6 +3,7 @@ import HUDBar from './components/HUDBar'
 import FlightMap from './components/FlightMap'
 import NearbyList from './components/NearbyList'
 import FlightDetail from './components/FlightDetail'
+import { getFallbackFeedLabel } from './api/fallbackFeed'
 import useFlights from './hooks/useFlights'
 import useWeather from './hooks/useWeather'
 import useFlightHistory from './hooks/useFlightHistory'
@@ -41,7 +42,7 @@ function normalizeFlightId(value) {
 
 export default function App() {
   const [selectedId, setSelectedId] = useState(null)
-  const [selectedSource, setSelectedSource] = useState('live')
+  const [selectedSource, setSelectedSource] = useState(MODE_LIVE)
   const [track, setTrack] = useState(null)
   const [runwayAlert, setRunwayAlert] = useState(null)
   const [viewportWidth, setViewportWidth] = useState(() => {
@@ -94,7 +95,7 @@ export default function App() {
   const selectedFlight = useMemo(() => {
     if (!selectedId) return null
 
-    if (selectedSource === 'history' || isHistoryMode) {
+    if (selectedSource === MODE_HISTORY || isHistoryMode) {
       return selectedFlightForMap || selectedHistoryFlight || selectedLiveFlight
     }
 
@@ -104,8 +105,16 @@ export default function App() {
   const hasSelectedFlight = Boolean(selectedFlight)
   const effectiveSelectedId = selectedFlight ? selectedId : null
   const selectedHistoryTrack = selectedId ? (history.trackByIcao?.get(selectedId) || null) : null
-  const trackForMap = selectedSource === 'history' ? selectedHistoryTrack : track
+  const trackForMap = selectedSource === MODE_HISTORY ? selectedHistoryTrack : track
   const detailRefreshMs = selectedFlight ? 1000 : pollMs
+  const detailFeedMode = useMemo(() => {
+    if (selectedSource === MODE_HISTORY || isHistoryMode) return MODE_HISTORY
+    return dataSource?.type === 'fallback' ? 'fallback' : 'live'
+  }, [selectedSource, isHistoryMode, dataSource?.type])
+  const detailTrackRefreshKey = useMemo(() => {
+    return `${selectedId ?? ''}:${selectedSource}:${detailFeedMode}:${lastUpdated?.getTime() ?? 0}`
+  }, [selectedId, selectedSource, detailFeedMode, lastUpdated])
+  const detailConnectionLabel = dataSource?.type === 'fallback' ? getFallbackFeedLabel() : 'OpenSky Network'
   const historyTimeline = isHistoryMode ? {
     mode: viewMode,
     speed: timelapseSpeed,
@@ -134,37 +143,37 @@ export default function App() {
     const nextId = normalizeFlightId(icao24)
     if (!nextId) return
     setSelectedId(nextId)
-    setSelectedSource('live')
+    setSelectedSource(MODE_LIVE)
     setTrack(null)
     setRunwayAlert(null)
   }, [])
 
-  const handleSelect = useCallback((icao24, source = 'live') => {
+  const handleSelect = useCallback((icao24, source = MODE_LIVE) => {
     const nextId = normalizeFlightId(icao24)
     if (!nextId) return
 
     setSelectedId(prev => {
       if (prev === nextId && selectedSource === source) {
-        setSelectedSource('live')
+        setSelectedSource(MODE_LIVE)
         setTrack(null)
         return null
       }
 
       setSelectedSource(source)
-      if (source === 'live') setTrack(null)
+      if (source === MODE_LIVE) setTrack(null)
       return nextId
     })
 
-    if (source === 'live') setRunwayAlert(null)
+    if (source === MODE_LIVE) setRunwayAlert(null)
   }, [selectedSource])
 
   const handleHistorySelect = useCallback((icao24) => {
-    handleSelect(icao24, 'history')
+    handleSelect(icao24, MODE_HISTORY)
   }, [handleSelect])
 
   const handleClose = useCallback(() => {
     setSelectedId(null)
-    setSelectedSource('live')
+    setSelectedSource(MODE_LIVE)
     setTrack(null)
   }, [])
 
@@ -173,12 +182,12 @@ export default function App() {
     if (mode !== MODE_TIMELAPSE) setTimelapsePlaying(true)
 
     if (mode === MODE_LIVE) {
-      setSelectedSource('live')
+      setSelectedSource(MODE_LIVE)
       setTrack(null)
       return
     }
 
-    setSelectedSource('history')
+    setSelectedSource(MODE_HISTORY)
     setTrack(null)
     setRunwayAlert(null)
   }, [])
@@ -197,23 +206,33 @@ export default function App() {
     })
   }, [])
 
+  const runwayFlightIds = (() => (
+    new Set(
+      flights
+        .map(f => f?.icao24)
+        .filter(Boolean)
+        .map(id => normalizeFlightId(id))
+    )
+  ))()
+
+  const visibleRunwayAlert = (() => {
+    if (!runwayAlert) return null
+    const validFlightId = normalizeFlightId(runwayAlert.flightId)
+    if (!validFlightId || !runwayAlert.flightLabel) return null
+    if (!runwayFlightIds.has(validFlightId)) return null
+    return {
+      ...runwayAlert,
+      flightId: validFlightId,
+      flightLabel: runwayAlert.flightLabel,
+    }
+  })()
+
   const handleRunwayAlertClick = useCallback(() => {
-    if (!runwayAlert?.flightId) return
-    activateFlight(runwayAlert.flightId)
-  }, [activateFlight, runwayAlert])
+    if (!visibleRunwayAlert?.flightId) return
+    activateFlight(visibleRunwayAlert.flightId)
+  }, [activateFlight, visibleRunwayAlert])
 
   const handleRunwayAlertDismiss = useCallback(() => setRunwayAlert(null), [])
-
-  useEffect(() => {
-    if (!runwayAlert) return
-    if (!runwayAlert.flightId || !runwayAlert.flightLabel) {
-      setRunwayAlert(null)
-      return
-    }
-    if (!flights.some(f => f.icao24 === runwayAlert.flightId)) {
-      setRunwayAlert(null)
-    }
-  }, [flights, runwayAlert])
 
   useEffect(() => {
     const onGlobalKeyDown = (event) => {
@@ -327,7 +346,7 @@ export default function App() {
             congestionFeatures={isHistoryMode ? history.congestion : null}
             timeline={historyTimeline}
           />
-          {runwayAlert && (
+          {visibleRunwayAlert && (
             <div style={{
               position: 'absolute',
               top: 72,
@@ -344,7 +363,7 @@ export default function App() {
               gap: 10,
             }}>
               <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'rgba(var(--cyan-alt-rgb), 0.75)', letterSpacing: 1.8 }}>
-                {runwayAlert.runwayLabel}
+                {visibleRunwayAlert.runwayLabel}
               </span>
               <span style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 0.5 }}>
                 inbound:
@@ -365,7 +384,7 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {runwayAlert.flightLabel}
+                {visibleRunwayAlert.flightLabel}
               </button>
               <button
                 type="button"
@@ -399,8 +418,10 @@ export default function App() {
               flight={selectedFlight}
               onClose={handleClose}
               autoFocusCloseButton
-              onTrackLoad={selectedSource === 'live' ? setTrack : undefined}
-              preloadedTrack={selectedSource === 'history' ? trackForMap : null}
+              onTrackLoad={selectedSource === MODE_LIVE ? setTrack : undefined}
+              feedMode={detailFeedMode}
+              trackRefreshKey={detailTrackRefreshKey}
+              preloadedTrack={selectedSource === MODE_HISTORY ? trackForMap : null}
               lastUpdated={lastUpdated}
               refreshMs={detailRefreshMs}
             />
@@ -420,7 +441,7 @@ export default function App() {
             ACQUIRING TRAFFIC
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-dim)', letterSpacing: 0.2 }}>
-            Connecting to OpenSky Network · KJFK
+            Connecting to {detailConnectionLabel} · KJFK
           </div>
         </div>
       )}

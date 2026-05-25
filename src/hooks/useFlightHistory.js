@@ -112,7 +112,7 @@ function congestionPointsFromFlights(flights, gridStep = 0.1) {
 
   const features = []
 
-  for (const [_, value] of buckets) {
+  for (const [, value] of buckets) {
     features.push({
       type: 'Feature',
       properties: {
@@ -144,10 +144,10 @@ export default function useFlightHistory({
   const [samples, setSamples] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [range, setRange] = useState(null)
-  const [cursorMs, setCursorMs] = useState(Date.now())
+  const [cursorMs, setCursorMs] = useState(() => Date.now())
   const [loadError, setLoadError] = useState(null)
   const timerRef = useRef(null)
-  const lastTickRef = useRef(Date.now())
+  const lastTickRef = useRef(0)
   const rangeRef = useRef(null)
   const cursorMsRef = useRef(cursorMs)
   const wasPlayingRef = useRef(isPlaying)
@@ -207,11 +207,21 @@ export default function useFlightHistory({
   }, [enabled, windowMs, isPlaying])
 
   useEffect(() => {
-    loadSamples()
     if (!enabled) return
+    let cancelled = false
 
-    const id = setInterval(loadSamples, REFRESH_INTERVAL_MS)
-    return () => clearInterval(id)
+    const runLoad = () => {
+      if (cancelled) return
+      void loadSamples()
+    }
+
+    const id = setInterval(runLoad, REFRESH_INTERVAL_MS)
+    runLoad()
+
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
   }, [enabled, loadSamples, refreshKey, windowMs])
 
   useEffect(() => {
@@ -256,8 +266,9 @@ export default function useFlightHistory({
     return out
   }, [groupedByIcao])
 
-  const cursorMsEffective = isPlaying ? cursorMs : (range?.endMs ?? Date.now())
-  const pathLimitMs = isPlaying ? cursorMsEffective : (range?.endMs ?? Date.now())
+  const endMs = range?.endMs ?? cursorMs
+  const cursorMsEffective = isPlaying ? cursorMs : endMs
+  const pathLimitMs = isPlaying ? cursorMsEffective : endMs
 
   const activeFlights = useMemo(() => {
     if (!enabled || !range) return []

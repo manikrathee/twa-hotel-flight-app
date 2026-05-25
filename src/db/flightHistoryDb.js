@@ -172,6 +172,22 @@ export async function getWindowSamples(windowMs) {
   return rows.filter(isValidSample)
 }
 
+function normalizeIcao(icao24) {
+  return String(icao24 || '').trim().toLowerCase()
+}
+
+export async function getRecentTrackForIcao(icao24, windowMs = 10 * 60 * 1000) {
+  const target = normalizeIcao(icao24)
+  if (!target) return null
+
+  const safeWindowMs = Number.isFinite(windowMs) && windowMs > 0 ? windowMs : 10 * 60 * 1000
+  const rows = await getWindowSamples(safeWindowMs)
+  const relevant = rows
+    .filter(sample => normalizeIcao(sample.icao24) === target)
+
+  return relevant.length ? convertSamplesToTrack(relevant) : null
+}
+
 export async function pruneOldSamples(retentionMs = MAX_HISTORY_MS) {
   const cutoff = Date.now() - retentionMs
   await withStore('readwrite', (store) => {
@@ -186,7 +202,6 @@ export async function pruneOldSamples(retentionMs = MAX_HISTORY_MS) {
           resolve()
           return
         }
-        const { key } = c
         c.delete()
         c.continue()
       }
