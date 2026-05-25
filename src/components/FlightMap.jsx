@@ -520,7 +520,7 @@ export default function FlightMap({
       map.remove()
       mapRef.current = null
     }
-  }, [theme.cyan, theme.cyanAlt, theme.redAlt, theme.amber, theme.textSoft])
+  }, [theme.cyan, theme.cyanAlt, theme.redAlt, theme.textSoft, theme.amber])
 
   // Update plane positions — incremental updateData() after first load
   useEffect(() => {
@@ -597,7 +597,7 @@ export default function FlightMap({
     pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat([lng, lat])
       .addTo(mapRef.current)
-  }, [selectedIcao, mapReady, theme.cyanAlt])
+  }, [selectedIcao, mapReady, theme.cyanAlt, selectedLat, selectedLng])
 
   // Update pulse ring position as plane moves
   useEffect(() => {

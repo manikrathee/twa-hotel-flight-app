@@ -27,29 +27,46 @@ function Clock() {
 }
 
 function DataSourceBadge({ dataSource }) {
-  if (!dataSource || dataSource.type === 'live') return null
-  const isMock = dataSource.type === 'mock' || dataSource.cacheSource === 'mock'
-  const stamp = dataSource.cachedAt
-    ? dataSource.cachedAt.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'America/New_York',
-      })
-    : null
-  const label = stamp ? `${isMock ? 'MOCK' : 'CACHE'} · ${stamp}` : (isMock ? 'MOCK' : 'CACHE')
+  const type = dataSource?.type
+  const isCached = type === 'cache'
+  const isFallback = type === 'fallback'
+  const cachedAtMs = dataSource?.cachedAt ? dataSource.cachedAt.getTime() : null
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const sourceLabel = isFallback ? `FALLBACK: ${(dataSource?.source || 'JFK feed').toUpperCase()}` : 'DB CACHE'
+
+  useEffect(() => {
+    if (!(isCached && cachedAtMs)) return
+    const update = () => setNowMs(Date.now())
+    update()
+    const id = setInterval(update, 30000)
+    return () => clearInterval(id)
+  }, [cachedAtMs, isCached])
+
+  if (!dataSource || type === 'live') return null
+
+  const ago = cachedAtMs ? Math.round((nowMs - cachedAtMs) / 60000) : null
+  const label = isCached
+    ? `DB CACHE · ${ago !== null ? `${ago < 1 ? '<1' : ago}m ago` : 'unavailable'}`
+    : sourceLabel
+
+  const accent = isFallback
+    ? 'var(--cyan-alt)'
+    : 'var(--amber)'
+  const border = isFallback
+    ? 'rgba(var(--cyan-alt-rgb), 0.45)'
+    : 'rgba(var(--amber-rgb), 0.38)'
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
       gap: 6,
-      background: 'rgba(var(--amber-rgb), 0.09)',
-      border: '1px solid rgba(var(--amber-rgb), 0.38)',
+      background: isFallback ? 'rgba(var(--cyan-alt-rgb), 0.08)' : 'rgba(var(--amber-rgb), 0.09)',
+      border: `1px solid ${border}`,
       borderRadius: 999,
       padding: '3px 9px',
       marginRight: 8,
       fontSize: 12,
-      color: 'var(--amber)',
+      color: accent,
       fontWeight: 600,
     }}>
       <span style={{ fontSize: 9, opacity: 0.7 }}>⬡</span>
@@ -199,10 +216,16 @@ export default function HUDBar({
   const runways = weather ? estimateActiveRunways(windDir) : []
   const airborne = flights.length
   const blocked = rateLimitStatus === 'blocked'
-  const sourceType = dataSource?.type || 'live'
-  const isLiveSource = sourceType === 'live' && !blocked
-  const feedLabel = isLiveSource ? 'LIVE' : sourceType === 'mock' ? 'MOCK' : 'CACHE'
-  const feedColor = isLiveSource ? 'var(--green)' : blocked ? 'var(--red)' : 'var(--amber)'
+  const isFallbackSource = dataSource?.type === 'fallback'
+  const isCacheSource = dataSource?.type === 'cache'
+  const feedLabel = blocked ? 'HOLD' : isFallbackSource ? 'FALLBACK' : isCacheSource ? 'CACHE' : 'LIVE'
+  const feedDot = blocked
+    ? 'var(--red)'
+    : isFallbackSource
+      ? 'var(--cyan-alt)'
+      : isCacheSource
+        ? 'var(--amber)'
+        : 'var(--green)'
 
   return (
     <div className="hudbar">
@@ -220,12 +243,11 @@ export default function HUDBar({
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: feedColor,
-            animation: isLiveSource ? 'pulse-dot 1.4s ease-in-out infinite' : 'none',
-            boxShadow: isLiveSource ? `0 0 8px ${feedColor}` : 'none',
-            opacity: isLiveSource ? 1 : 0.74,
+            background: feedDot,
+            animation: 'pulse-dot 1.4s ease-in-out infinite',
+            boxShadow: `0 0 8px ${feedDot}`,
           }} />
-          <span style={{ fontSize: 12, color: feedColor, fontWeight: 600 }}>
+          <span style={{ fontSize: 12, color: feedDot, fontWeight: 600 }}>
             {feedLabel}
           </span>
         </div>

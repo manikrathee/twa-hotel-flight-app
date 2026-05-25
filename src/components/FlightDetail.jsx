@@ -13,9 +13,14 @@ export default function FlightDetail({
   lastUpdated,
   refreshMs,
   autoFocusCloseButton,
+  feedMode = 'live',
+  trackRefreshKey,
 }) {
   const closeButtonRef = useRef(null)
-  const { track, route, aircraftInfo, loading } = useFlightDetail(flight, preloadedTrack)
+  const { track, route, aircraftInfo, loading } = useFlightDetail(flight, preloadedTrack, {
+    feedMode,
+    refreshKey: trackRefreshKey,
+  })
   const [showPath, setShowPath] = useState(false)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -102,14 +107,32 @@ export default function FlightDetail({
                    : squawk === '7500' ? '⚠ HIJACK'
                    : squawk
 
-  const routePathProgress = routeProgress(origin, dest, flight, routeMiles)
-  const overflyCountries = uniqueCountries([
-    origin?.country,
-    origin?.country_iso,
-    flight.origin_country,
-    dest?.country,
-    dest?.country_iso,
-  ])
+  const routePathProgress = (() => {
+    if (!origin || !dest) return null
+    if (flight.latitude == null || flight.longitude == null) return null
+    const remainingMi = Math.round(distanceMiles(flight.latitude, flight.longitude, dest.latitude, dest.longitude))
+    if (!routeMiles || !Number.isFinite(routeMiles)) {
+      return { remainingMi, flownMi: null, progress: null }
+    }
+    const flownMi = Math.round(distanceMiles(origin.latitude, origin.longitude, flight.latitude, flight.longitude))
+    const progress = Math.round(clamp01(flownMi / routeMiles) * 100)
+    return { remainingMi, flownMi, progress }
+  })()
+
+  const overflyCountries = (() => {
+    const list = []
+    const append = (value) => {
+      const country = String(value || '').trim()
+      if (!country) return
+      if (!list.includes(country)) list.push(country)
+    }
+    append(origin?.country)
+    append(origin?.country_iso)
+    append(flight.origin_country)
+    append(dest?.country)
+    append(dest?.country_iso)
+    return list
+  })()
 
   // Flight phase
   const isClimbing   = vrFpm > 200
@@ -121,6 +144,11 @@ export default function FlightDetail({
   const updatedLabel = lastUpdated
     ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
     : null
+  const sourceLabel = feedMode === 'fallback'
+    ? 'FALLBACK'
+    : feedMode === 'history'
+      ? 'HISTORY'
+      : 'LIVE'
 
   return (
     <div style={{
@@ -177,7 +205,7 @@ export default function FlightDetail({
           </div>
           {(refreshSec || updatedLabel) && (
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', letterSpacing: 0.8 }}>
-              LIVE
+              {sourceLabel}
               {refreshSec ? ` · ${refreshSec}s refresh` : ''}
               {updatedLabel ? ` · ${updatedLabel}` : ''}
             </div>

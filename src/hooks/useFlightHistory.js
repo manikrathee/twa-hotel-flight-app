@@ -112,7 +112,7 @@ function congestionPointsFromFlights(flights, gridStep = 0.1) {
 
   const features = []
 
-  for (const value of buckets.values()) {
+  for (const [, value] of buckets) {
     features.push({
       type: 'Feature',
       properties: {
@@ -144,10 +144,10 @@ export default function useFlightHistory({
   const [samples, setSamples] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [range, setRange] = useState(null)
-  const [cursorMs, setCursorMs] = useState(0)
+  const [cursorMs, setCursorMs] = useState(() => Date.now())
   const [loadError, setLoadError] = useState(null)
   const timerRef = useRef(null)
-  const lastTickRef = useRef(Date.now())
+  const lastTickRef = useRef(0)
   const rangeRef = useRef(null)
   const cursorMsRef = useRef(cursorMs)
   const wasPlayingRef = useRef(isPlaying)
@@ -207,20 +207,22 @@ export default function useFlightHistory({
   }, [enabled, windowMs, isPlaying])
 
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
-    const runLoadSamples = () => {
-      if (!cancelled) void loadSamples()
+
+    const runLoad = () => {
+      if (cancelled) return
+      void loadSamples()
     }
 
-    Promise.resolve().then(runLoadSamples)
-    if (!enabled) return () => { cancelled = true }
+    const id = setInterval(runLoad, REFRESH_INTERVAL_MS)
+    runLoad()
 
-    const id = setInterval(runLoadSamples, REFRESH_INTERVAL_MS)
     return () => {
       cancelled = true
       clearInterval(id)
     }
-  }, [enabled, loadSamples, refreshKey])
+  }, [enabled, loadSamples, refreshKey, windowMs])
 
   useEffect(() => {
     if (!enabled || !isPlaying || !range?.startMs || !range?.endMs) return
@@ -264,9 +266,9 @@ export default function useFlightHistory({
     return out
   }, [groupedByIcao])
 
-  const rangeEndMs = range?.endMs ?? cursorMs
-  const cursorMsEffective = isPlaying ? cursorMs : rangeEndMs
-  const pathLimitMs = cursorMsEffective
+  const endMs = range?.endMs ?? cursorMs
+  const cursorMsEffective = isPlaying ? cursorMs : endMs
+  const pathLimitMs = isPlaying ? cursorMsEffective : endMs
 
   const activeFlights = useMemo(() => {
     if (!enabled || !range) return []

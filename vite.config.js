@@ -51,46 +51,65 @@ function openskyAuthProxy(mode) {
   }
 }
 
-export default defineConfig(({ mode }) => ({
-  plugins: [react(), openskyAuthProxy(mode)],
-  build: {
-    // MapLibre ships as a single large prebuilt module; keep warning signal for others.
-    chunkSizeWarningLimit: 1200,
-    rolldownOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return
-          if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) {
-            return 'react-vendor'
-          }
-          if (id.includes('/node_modules/maplibre-gl/')) {
-            return 'maplibre-vendor'
-          }
-          return 'vendor'
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const fallbackFeedProxyTarget = env.VITE_FALLBACK_FEED_PROXY_TARGET
+  const fallbackFeedProxyPath = env.VITE_FALLBACK_FEED_PROXY_PATH || '/api/jfk-fallback'
+  const fallbackFeedProxy = fallbackFeedProxyTarget
+    ? {
+        [fallbackFeedProxyPath]: {
+          target: fallbackFeedProxyTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.startsWith(fallbackFeedProxyPath)
+            ? path.slice(fallbackFeedProxyPath.length) || '/'
+            : path,
+          secure: true,
+        },
+      }
+      : {}
+
+    return {
+      plugins: [react(), openskyAuthProxy(mode)],
+      build: {
+        // MapLibre ships as a single large prebuilt module; keep warning signal for others.
+        chunkSizeWarningLimit: 1200,
+      rolldownOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) {
+              return 'react-vendor'
+            }
+            if (id.includes('/node_modules/maplibre-gl/')) {
+              return 'maplibre-vendor'
+            }
+            return 'vendor'
+          },
         },
       },
     },
-  },
-  server: {
-    proxy: {
-      '/api/opensky': {
-        target: 'https://opensky-network.org',
-        changeOrigin: true,
-        rewrite: path => path.replace(/^\/api\/opensky/, '/api'),
-        secure: true,
-      },
-      '/api/adsbdb': {
-        target: 'https://api.adsbdb.com',
-        changeOrigin: true,
-        rewrite: path => path.replace(/^\/api\/adsbdb/, ''),
-        secure: true,
-      },
-      '/api/weather': {
-        target: 'https://api.open-meteo.com',
-        changeOrigin: true,
-        rewrite: path => path.replace(/^\/api\/weather/, ''),
-        secure: true,
+    server: {
+      proxy: {
+        '/api/opensky': {
+          target: 'https://opensky-network.org',
+          changeOrigin: true,
+          rewrite: path => path.replace(/^\/api\/opensky/, '/api'),
+          secure: true,
+        },
+        '/api/adsbdb': {
+          target: 'https://api.adsbdb.com',
+          changeOrigin: true,
+          rewrite: path => path.replace(/^\/api\/adsbdb/, ''),
+          secure: true,
+        },
+        '/api/weather': {
+          target: 'https://api.open-meteo.com',
+          changeOrigin: true,
+          rewrite: path => path.replace(/^\/api\/weather/, ''),
+          secure: true,
+        },
+        ...fallbackFeedProxy,
       },
     },
-  },
-}))
+  }
+})

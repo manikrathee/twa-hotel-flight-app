@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchFlights, fetchCachedFlights } from '../api/opensky'
+import {
+  fetchFallbackFlights,
+  getFallbackFeedLabel,
+  getFallbackFeedPrimaryRetryMs,
+  isFallbackFeedEnabled,
+} from '../api/fallbackFeed'
 import { fetchCallsignRoute } from '../api/adsbdb'
 import { isBlocked, backoffRemainingMs } from '../api/rateLimitManager'
 import { distanceKm } from '../utils/geo'
@@ -22,6 +28,7 @@ const CONSTRAINED_FLIGHT_LIMIT = 30
 const CONSTRAINED_ROUTE_LOOKUP_LIMIT = 24
 const HIGH_DENSITY_FLIGHT_THRESHOLD = 120
 const SLOW_CONN_TYPES = new Set(['slow-2g', '2g'])
+const FALLBACK_MODE = 'fallback'
 
 const routeCache = new Map()
 const inFlightRouteLookup = new Map()
@@ -299,6 +306,7 @@ async function enrichFlights(raw, options = {}) {
 export default function useFlights(selectedIcao = null) {
   const selectedPollMs = HAS_OPENSKY_AUTH ? SELECTED_POLL_AUTH_MS : SELECTED_POLL_ANON_MS
   const pollMs = selectedIcao ? selectedPollMs : BASE_POLL_MS
+  const fallbackAvailable = isFallbackFeedEnabled()
 
   const [flights, setFlights]               = useState([])
   const [loading, setLoading]               = useState(true)
@@ -317,11 +325,17 @@ export default function useFlights(selectedIcao = null) {
   const latestRef = useRef([])
   const extrapolationRef = useRef(null)
   const loadInFlightRef = useRef(false)
+  const fallbackProbeAtRef = useRef(0)
 
   const scheduleNext = useCallback((delayMs) => {
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => { loadRef.current?.() }, delayMs)
   }, [])
+
+  const shouldProbePrimary = useCallback(() => {
+    if (!fallbackAvailable) return true
+    return !isBlocked() && Date.now() >= fallbackProbeAtRef.current
+  }, [fallbackAvailable])
 
   const load = useCallback(async () => {
     if (!mountedRef.current) return
@@ -330,7 +344,7 @@ export default function useFlights(selectedIcao = null) {
     const networkBlocked = isBlocked()
     const constrainedByConnection = isConnectionConstrained()
 
-    if (networkBlocked) {
+    if (networkBlocked && !fallbackAvailable) {
       const remaining = backoffRemainingMs()
       setRateLimitStatus('blocked')
       setBackoffUntil(Date.now() + remaining)
@@ -341,7 +355,43 @@ export default function useFlights(selectedIcao = null) {
 
     loadInFlightRef.current = true
     try {
-      const raw = await fetchFlights()
+      let raw = null
+      let usedFallback = false
+      let fetchError = null
+
+      if (!fallbackAvailable || shouldProbePrimary()) {
+        try {
+          raw = await fetchFlights()
+        } catch (error) {
+          fetchError = error
+          if (shouldProbePrimary()) {
+            fallbackProbeAtRef.current = Date.now() + getFallbackFeedPrimaryRetryMs()
+          }
+          if (fetchError && fallbackAvailable) {
+            raw = null
+          } else {
+            throw error
+          }
+        }
+      }
+
+      if (!raw && fallbackAvailable) {
+        try {
+          raw = await fetchFallbackFlights()
+          usedFallback = true
+        } catch (fallbackError) {
+          if (!fetchError) fetchError = fallbackError
+        }
+      }
+
+      if (!raw) {
+        throw fetchError || new Error('No live flight payload available')
+      }
+
+      if (usedFallback) {
+        fallbackProbeAtRef.current = Date.now() + getFallbackFeedPrimaryRetryMs()
+      } else {
+        fallbackProbeAtRef.current = 0
       const historySamples = buildAirborneSamples(raw)
       if (historySamples.length) {
         await recordFlightSamples(historySamples, Date.now())
@@ -427,7 +477,10 @@ export default function useFlights(selectedIcao = null) {
       setError(null)
       setRateLimitStatus('ok')
       setBackoffUntil(null)
-      setDataSource({ type: 'live' })
+      setDataSource({
+        type: usedFallback ? FALLBACK_MODE : 'live',
+        source: usedFallback ? getFallbackFeedLabel() : 'OpenSky',
+      })
       flightCache.evict()
       evictRouteCache()
       scheduleNext(pollMs)
@@ -494,7 +547,7 @@ export default function useFlights(selectedIcao = null) {
       loadInFlightRef.current = false
       if (mountedRef.current) setLoading(false)
     }
-  }, [pollMs, scheduleNext])
+  }, [pollMs, scheduleNext, fallbackAvailable, shouldProbePrimary])
 
   useEffect(() => {
     loadRef.current = load
