@@ -9,20 +9,19 @@ function Clock() {
     const id = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
-  const utc = time.toUTCString().slice(17, 25)
   const local = time.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
+    hour12: true,
     timeZone: 'America/New_York',
+    timeZoneName: 'short',
   })
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
       <span style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>
         {local}
       </span>
-      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{utc}Z</span>
     </div>
   )
 }

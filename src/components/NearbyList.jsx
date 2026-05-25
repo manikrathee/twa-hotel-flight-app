@@ -75,10 +75,16 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
   return (
     <div style={{
       width,
-      flexShrink: 0,
-      background: 'var(--panel)',
-      backdropFilter: 'blur(16px)',
-      borderRight: '1px solid var(--border)',
+      position: 'absolute',
+      top: 16,
+      left: 16,
+      zIndex: 180,
+      maxHeight: 'calc(100% - 32px)',
+      background: 'rgba(7, 13, 21, 0.88)',
+      backdropFilter: 'blur(18px) saturate(1.16)',
+      border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
+      borderRadius: 14,
+      boxShadow: '0 22px 52px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -91,7 +97,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
-        background: 'var(--panel-strong)',
+        background: 'linear-gradient(180deg, rgba(13,24,36,0.95), rgba(8,13,20,0.84))',
       }}>
         <div style={{ fontSize: 14, color: 'var(--heading)', fontWeight: 700 }}>
           NEARBY TRAFFIC
@@ -121,7 +127,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
       </div>
 
       {/* Flight list — grouped by proximity zone */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: '0 1 auto', overflowY: 'auto' }}>
         {totalShown === 0 && (
           <div role="status" aria-live="polite" aria-atomic="true" style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center' }}>
             {showNoData ? 'No nearby traffic in range.' : emptyMessage}

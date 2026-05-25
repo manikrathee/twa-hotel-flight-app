@@ -1,9 +1,9 @@
 export const JFK = { lat: 40.6413, lon: -73.7781, iata: 'JFK', icao: 'KJFK' }
 export const TWA_HOTEL = { lat: 40.6414, lon: -73.7783 }
 
-export const MAP_RADIUS_MI = 1
+export const MAP_RADIUS_MI = 12
 export const MAP_RADIUS_KM = MAP_RADIUS_MI * 1.609344
-export const TWA_VISIBLE_RADIUS_MI = 1
+export const TWA_VISIBLE_RADIUS_MI = 12
 
 const MILES_PER_LAT_DEG = 69
 

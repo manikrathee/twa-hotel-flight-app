@@ -17,7 +17,6 @@ const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.22, constrained: 0.18 }
 const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
 
 const MODE_LIVE = 'live'
-const MODE_HISTORY = 'history'
 const MODE_TIMELAPSE = 'timelapse'
 
 const HISTORY_WINDOWS = [

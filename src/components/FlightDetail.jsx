@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import useFlightDetail from '../hooks/useFlightDetail'
-import AircraftSilhouette from './AircraftSilhouette'
+import AircraftRender from './AircraftRender'
 import FlightPath from './FlightPath'
 import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
 import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
@@ -84,6 +84,20 @@ export default function FlightDetail({
   const lastContactStamp = flight.last_contact
     ? `${new Date(flight.last_contact * 1000).toUTCString().slice(17, 25)} UTC`
     : null
+  const nowSec = Math.floor(nowMs / 1000)
+  const positionAgeSec = flight.time_position
+    ? Math.max(0, nowSec - flight.time_position)
+    : null
+  const contactAgeSec = flight.last_contact
+    ? Math.max(0, nowSec - flight.last_contact)
+    : null
+  const sourceLabel = positionSourceLabel(flight.position_source)
+  const statusLabel = flight.on_ground === true ? 'GROUND'
+                    : flight.on_ground === false ? 'AIRBORNE'
+                    : null
+  const statusColor = flight.on_ground === true ? 'var(--amber)' : 'var(--green)'
+  const latShort = compactLatitude(flight.latitude)
+  const lonShort = compactLongitude(flight.longitude)
 
   // Squawk analysis
   const squawk     = flight.squawk
@@ -209,14 +223,7 @@ export default function FlightDetail({
           background: 'linear-gradient(135deg, rgba(var(--cyan-alt-rgb), 0.045) 0%, transparent 60%)',
         }}>
           <div style={{ flexShrink: 0 }}>
-            {photo
-              ? <img
-                  src={photo}
-                  alt={`${flightNum || callsign} aircraft photo`}
-                  style={{ width: 120, height: 80, objectFit: 'cover', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--panel-subtle)' }}
-                />
-              : <AircraftSilhouette typeCode={typeCode} size={100} />
-            }
+            <AircraftRender typeCode={typeCode} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600, letterSpacing: 0.2 }}>AIRCRAFT</div>
@@ -273,6 +280,34 @@ export default function FlightDetail({
                 color="var(--text-dim)" />
             </div>
           )}
+          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {positionAgeSec !== null && (
+              <BigStat label="FIX AGE" value={formatAgeSeconds(positionAgeSec)}
+                sub="position timestamp" color={ageColor(positionAgeSec)} />
+            )}
+            {contactAgeSec !== null && (
+              <BigStat label="LAST SEEN" value={formatAgeSeconds(contactAgeSec)}
+                sub="transponder contact" color={ageColor(contactAgeSec)} />
+            )}
+            {sourceLabel && (
+              <BigStat label="SOURCE" value={sourceLabel}
+                sub="position source" color="var(--cyan)" />
+            )}
+          </div>
+          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {statusLabel && (
+              <BigStat label="STATUS" value={statusLabel}
+                sub={flight.spi ? 'special position ident' : 'normal transponder'} color={statusColor} />
+            )}
+            {latShort && (
+              <BigStat label="LATITUDE" value={latShort}
+                sub="current fix" color="var(--text)" />
+            )}
+            {lonShort && (
+              <BigStat label="LONGITUDE" value={lonShort}
+                sub="current fix" color="var(--text)" />
+            )}
+          </div>
         </div>
 
         {/* ── Altitude profile ──────────────────────── */}
@@ -320,7 +355,7 @@ export default function FlightDetail({
                     value={`${route.airline.name}${route.airline.iata || route.airline.icao ? ` (${[route.airline.iata, route.airline.icao].filter(Boolean).join('/')})` : ''}`}
                   />
                 )}
-                {Number.isFinite(routePathProgress?.flownMi) && <MiniKV label="FLYED" value={`${routePathProgress.flownMi.toLocaleString()} mi`} />}
+                {Number.isFinite(routePathProgress?.flownMi) && <MiniKV label="FLOWN" value={`${routePathProgress.flownMi.toLocaleString()} mi`} />}
               </div>
             )}
             {overflyCountries.length > 0 && (
@@ -457,11 +492,72 @@ function routeDistanceMiles(origin, dest) {
   return Math.round(distanceMiles(vals[0], vals[1], vals[2], vals[3]))
 }
 
+function routeProgress(origin, dest, flight, routeMiles) {
+  if (!origin || !dest) return null
+  if (flight.latitude == null || flight.longitude == null) return null
+  const remainingMi = Math.round(distanceMiles(flight.latitude, flight.longitude, dest.latitude, dest.longitude))
+  if (!routeMiles || !Number.isFinite(routeMiles)) {
+    return { remainingMi, flownMi: null, progress: null }
+  }
+  const flownMi = Math.round(distanceMiles(origin.latitude, origin.longitude, flight.latitude, flight.longitude))
+  const progress = Math.round(clamp01(flownMi / routeMiles) * 100)
+  return { remainingMi, flownMi, progress }
+}
+
+function uniqueCountries(values) {
+  const list = []
+  for (const value of values) {
+    const country = String(value || '').trim()
+    if (country && !list.includes(country)) list.push(country)
+  }
+  return list
+}
+
 function clamp01(value) {
   if (!Number.isFinite(value)) return 0
   if (value < 0) return 0
   if (value > 1) return 1
   return value
+}
+
+function positionSourceLabel(source) {
+  if (source === null || source === undefined || source === '') return null
+  return {
+    0: 'ADS-B',
+    1: 'ASTERIX',
+    2: 'MLAT',
+    3: 'FLARM',
+  }[source] || `SRC ${source}`
+}
+
+function formatAgeSeconds(seconds) {
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return `${mins}m ${secs}s`
+  }
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  return `${hours}h ${mins}m`
+}
+
+function ageColor(seconds) {
+  if (seconds > 90) return 'var(--red)'
+  if (seconds > 45) return 'var(--amber)'
+  return 'var(--green)'
+}
+
+function compactLatitude(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return null
+  return `${Math.abs(num).toFixed(3)}°${num < 0 ? 'S' : 'N'}`
+}
+
+function compactLongitude(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return null
+  return `${Math.abs(num).toFixed(3)}°${num < 0 ? 'W' : 'E'}`
 }
 
 function resolveTypeCode(aircraftInfo) {
