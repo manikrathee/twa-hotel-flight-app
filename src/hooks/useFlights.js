@@ -203,6 +203,13 @@ function evictRouteCache() {
   }
 }
 
+function buildAirborneSamples(raw) {
+  return raw
+    .map(normalizeFlightState)
+    .filter(Boolean)
+    .filter(f => !f.on_ground)
+}
+
 async function resolveRoute(callsign) {
   const key = normalizeCallsign(callsign)
   if (!key) return null
@@ -231,20 +238,18 @@ async function resolveRoute(callsign) {
 }
 
 async function enrichFlights(raw, options = {}) {
+  const { skipHotelFilter = false, skipRouteFilter = false } = options
   const { constrained } = options
 
-  const candidates = raw
-    .map(normalizeFlightState)
-    .filter(Boolean)
-    .filter(f => !f.on_ground)
+  const candidates = buildAirborneSamples(raw)
     .map(f => {
+      const distKm = distanceKm(JFK.lat, JFK.lon, f.latitude, f.longitude)
+      if (skipHotelFilter) return { ...f, distKm }
+
       const distToTwaKm = distanceKm(TWA_HOTEL.lat, TWA_HOTEL.lon, f.latitude, f.longitude)
       if (distToTwaKm > TWA_VISIBLE_RADIUS_KM) return null
 
-      return {
-        ...f,
-        distKm: distanceKm(JFK.lat, JFK.lon, f.latitude, f.longitude),
-      }
+      return { ...f, distKm }
     })
     .filter(Boolean)
     .sort((a, b) => a.distKm - b.distKm)
@@ -268,6 +273,7 @@ async function enrichFlights(raw, options = {}) {
 
   const ranked = routeWindow
     .filter(f => {
+      if (skipRouteFilter) return true
       const callsign = normalizeCallsign(f.callsign)
       if (!callsign) return true
       const route = routeByCallsign.get(callsign)
@@ -336,15 +342,51 @@ export default function useFlights(selectedIcao = null) {
     loadInFlightRef.current = true
     try {
       const raw = await fetchFlights()
+      const historySamples = buildAirborneSamples(raw)
+      if (historySamples.length) {
+        await recordFlightSamples(historySamples, Date.now())
+      }
+
       const shouldConstrain = constrainedByConnection || raw.length > HIGH_DENSITY_FLIGHT_THRESHOLD
       setIsConstrained(shouldConstrain)
       const filtered = await enrichFlights(raw, { constrained: shouldConstrain })
+      const routeOnlyFallback = filtered.length === 0 && historySamples.length > 0
+        ? await enrichFlights(raw, { constrained: false, skipRouteFilter: true })
+        : null
+      const routeAndHotelFallback = filtered.length === 0 && historySamples.length > 0
+        ? await enrichFlights(raw, { constrained: false, skipHotelFilter: true, skipRouteFilter: true })
+        : null
+      const finalFiltered = routeOnlyFallback && routeOnlyFallback.length > 0
+        ? routeOnlyFallback
+        : (routeAndHotelFallback && routeAndHotelFallback.length > 0
+          ? routeAndHotelFallback
+          : filtered)
       if (!mountedRef.current) return
 
-      if (!filtered.length) {
+      if (!finalFiltered.length) {
         try {
           const cached = await fetchCachedFlights()
-          const fallback = cached?.flights ? await enrichFlights(cached.flights, { constrained: true }) : []
+          const cachedSamples = buildAirborneSamples(cached?.flights || [])
+          if (cachedSamples.length > 0) {
+            await recordFlightSamples(cachedSamples, cached.cachedAt?.getTime() || Date.now())
+          }
+          let fallback = cached?.flights ? await enrichFlights(cached.flights, { constrained: true }) : []
+          if (fallback.length === 0 && cachedSamples.length > 0) {
+            const fallbackFiltered = await enrichFlights(cached.flights, { constrained: false, skipRouteFilter: true })
+            if (fallbackFiltered.length > 0) {
+              fallback = fallbackFiltered
+            }
+          }
+          if (fallback.length === 0 && cachedSamples.length > 0) {
+            const noRouteNoHotelFiltered = await enrichFlights(cached.flights, {
+              constrained: false,
+              skipHotelFilter: true,
+              skipRouteFilter: true,
+            })
+            if (noRouteNoHotelFiltered.length > 0) {
+              fallback = noRouteNoHotelFiltered
+            }
+          }
           if (!mountedRef.current) return
           latestRef.current = fallback
           if (hasFlightsChanged(flightsRef.current, fallback)) {
@@ -371,16 +413,14 @@ export default function useFlights(selectedIcao = null) {
         }
       }
 
-      latestRef.current = filtered
+      latestRef.current = finalFiltered
 
-      if (hasFlightsChanged(flightsRef.current, filtered)) {
-        setFlights(filtered)
-        flightsRef.current = filtered
+      if (hasFlightsChanged(flightsRef.current, finalFiltered)) {
+        setFlights(finalFiltered)
+        flightsRef.current = finalFiltered
       } else {
-        flightsRef.current = filtered
+        flightsRef.current = finalFiltered
       }
-
-      await recordFlightSamples(filtered, Date.now())
 
       setLastUpdated(new Date())
       setIsStale(false)
@@ -410,10 +450,28 @@ export default function useFlights(selectedIcao = null) {
         const cached = await fetchCachedFlights()
         if (cached && mountedRef.current) {
           setIsConstrained(true)
-          const filtered = await enrichFlights(cached.flights, { constrained: true })
+          const cachedSamples = buildAirborneSamples(cached.flights)
+          await recordFlightSamples(cachedSamples, cached.cachedAt?.getTime() || Date.now())
+
+          let filtered = await enrichFlights(cached.flights, { constrained: true })
+          if (filtered.length === 0 && cachedSamples.length > 0) {
+            const fallbackFiltered = await enrichFlights(cached.flights, { constrained: false, skipRouteFilter: true })
+            if (fallbackFiltered.length > 0) {
+              filtered = fallbackFiltered
+            }
+          }
+          if (filtered.length === 0 && cachedSamples.length > 0) {
+            const noRouteNoHotelFiltered = await enrichFlights(cached.flights, {
+              constrained: false,
+              skipHotelFilter: true,
+              skipRouteFilter: true,
+            })
+            if (noRouteNoHotelFiltered.length > 0) {
+              filtered = noRouteNoHotelFiltered
+            }
+          }
           if (!mountedRef.current) return
           latestRef.current = filtered
-          await recordFlightSamples(filtered, cached.cachedAt?.getTime() || Date.now())
           if (hasFlightsChanged(flightsRef.current, filtered)) {
             setFlights(filtered)
             flightsRef.current = filtered
