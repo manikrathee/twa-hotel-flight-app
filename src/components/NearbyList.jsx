@@ -1,18 +1,14 @@
-import { memo, useDeferredValue, useMemo, useState } from 'react'
+import { memo, useDeferredValue, useMemo } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
 // Distance thresholds in km (roughly 10mi and 30mi)
 const KM_APPROACH = 16
 const KM_TERMINAL = 48
-const MAX_ENROUTE = 10
 
-const SORT_OPTIONS = [
-  { id: 'distance', label: 'Distance' },
-  { id: 'altitude', label: 'Altitude' },
-  { id: 'speed', label: 'Speed' },
-  { id: 'callsign', label: 'Callsign' },
-]
+function sortFlightsByDistance(flights) {
+  return [...flights].sort((a, b) => (a.distKm || Infinity) - (b.distKm || Infinity))
+}
 
 function ZoneHeader({ label, count, color, sublabel }) {
   return (
@@ -40,50 +36,11 @@ function ZoneHeader({ label, count, color, sublabel }) {
   )
 }
 
-function sortFlights(flights, sortBy, sortAsc) {
-  const sign = sortAsc ? 1 : -1
-  return [...flights].sort((a, b) => {
-    let result = 0
-    if (sortBy === 'distance') {
-      result = (a.distKm || Infinity) - (b.distKm || Infinity)
-    } else if (sortBy === 'altitude') {
-      result = (a.baro_altitude || 0) - (b.baro_altitude || 0)
-    } else if (sortBy === 'speed') {
-      result = (a.velocity || 0) - (b.velocity || 0)
-    } else if (sortBy === 'callsign') {
-      const as = String(a.callsign || a.icao24 || '').toLowerCase()
-      const bs = String(b.callsign || b.icao24 || '').toLowerCase()
-      result = as.localeCompare(bs)
-    }
-    if (result !== 0) return result * sign
-    return ((a.distKm || 0) - (b.distKm || 0)) * sign
-  })
-}
-
-function matchesSearch(flight, term) {
-  if (!term) return true
-  const haystack = `${flight.callsign || ''} ${flight.icao24 || ''} ${getAirlineName(flight.callsign) || ''}`.toLowerCase()
-  return haystack.includes(term.toLowerCase())
-}
-
-function NearbyList({ flights, selectedId, onSelect, width, loading, error, searchInputRef }) {
+function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
   const deferredFlights = useDeferredValue(flights)
-  const [sortBy, setSortBy] = useState('distance')
-  const [sortAsc, setSortAsc] = useState(true)
-  const [search, setSearch] = useState('')
-  const [showAllEnroute, setShowAllEnroute] = useState(false)
+  const sortedFlights = useMemo(() => sortFlightsByDistance(deferredFlights), [deferredFlights])
 
-  const searchTerm = search.trim().toLowerCase()
-  const hasSearch = searchTerm.length > 0
-
-  const filteredFlights = useMemo(() => {
-    if (!hasSearch) return deferredFlights
-    return deferredFlights.filter(f => matchesSearch(f, searchTerm))
-  }, [deferredFlights, hasSearch, searchTerm])
-
-  const sortedFlights = useMemo(() => sortFlights(filteredFlights, sortBy, sortAsc), [filteredFlights, sortBy, sortAsc])
-
-  const { approach, terminal, enrouteAll, enroute, totalShown, totalShownLabel } = useMemo(() => {
+  const { approach, terminal, enroute, totalShown, totalShownLabel } = useMemo(() => {
     const approachZone = []
     const terminalZone = []
     const enrouteAllZone = []
@@ -98,27 +55,18 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, sear
       }
     }
 
-    const visibleEnroute = showAllEnroute ? enrouteAllZone : enrouteAllZone.slice(0, MAX_ENROUTE)
-    const shownTotal = approachZone.length + terminalZone.length + visibleEnroute.length
-
     return {
       approach: approachZone,
       terminal: terminalZone,
-      enrouteAll: enrouteAllZone,
-      enroute: visibleEnroute,
-      totalShown: shownTotal,
-      totalShownLabel: shownTotal === filteredFlights.length ? `${shownTotal}` : `${shownTotal} / ${filteredFlights.length}`,
+      enroute: enrouteAllZone,
+      totalShown: approachZone.length + terminalZone.length + enrouteAllZone.length,
+      totalShownLabel: `${approachZone.length + terminalZone.length + enrouteAllZone.length}`,
     }
-  }, [filteredFlights.length, showAllEnroute, sortedFlights])
+  }, [sortedFlights])
 
-  const showSearchNoData = hasSearch && totalShown === 0
-  const showNoData = !loading && totalShown === 0 && !showSearchNoData
-  const enrouteSummary = enrouteAll.length > MAX_ENROUTE && !showAllEnroute
-    ? `${MAX_ENROUTE}/${enrouteAll.length}`
-    : enrouteAll.length
-  const emptyMessage = showSearchNoData
-    ? `No flights match “${search}”.`
-    : error && !loading
+  const showNoData = !loading && totalShown === 0
+  const enrouteSummary = enroute.length
+  const emptyMessage = error && !loading
       ? `Flight feed issue: ${error}`
       : loading
         ? 'Acquiring nearby traffic…'
@@ -155,100 +103,6 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, sear
           fontWeight: 600,
         }}>
           {totalShownLabel} shown
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--panel-divider)' }}>
-        <label htmlFor="flight-search" style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-dim)' }}>
-          <span id="flight-search-help">Find</span>
-          <input
-            id="flight-search"
-            ref={searchInputRef}
-            type="text"
-            inputMode="search"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search callsign, ICAO, airline"
-            aria-label="Search nearby flights by callsign, ICAO, or airline"
-            aria-describedby="flight-search-help"
-            autoComplete="off"
-            style={{
-              width: '100%',
-              fontSize: 12,
-              borderRadius: 5,
-              border: '1px solid var(--panel-border)',
-              background: 'var(--panel-strong)',
-              color: 'var(--heading)',
-              padding: '7px 9px',
-            }}
-          />
-        </label>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label style={{ display: 'grid', gap: 3, flex: 1 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Sort</span>
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              aria-label={`Sort nearby flights by ${SORT_OPTIONS.find(option => option.id === sortBy)?.label || 'distance'}`}
-              style={{
-                borderRadius: 5,
-                border: '1px solid var(--panel-border)',
-                background: 'var(--panel-strong)',
-                color: 'var(--heading)',
-                fontSize: 12,
-                padding: '6px 8px',
-              }}
-            >
-              {SORT_OPTIONS.map(option => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-
-            <button
-              type="button"
-              onClick={() => setSortAsc(s => !s)}
-              aria-pressed={sortAsc}
-              aria-label={`Sort direction ${sortAsc ? 'ascending' : 'descending'} for ${SORT_OPTIONS.find(option => option.id === sortBy)?.label || 'distance'}`}
-              style={{
-                marginTop: 13,
-                borderRadius: 5,
-                border: '1px solid var(--panel-border)',
-                background: 'var(--panel-strong)',
-                color: 'var(--text)',
-                fontSize: 11,
-                fontWeight: 600,
-              padding: '6px 9px',
-              cursor: 'pointer',
-            }}
-          >
-            {sortAsc ? 'ASC' : 'DESC'}
-          </button>
-
-          <label style={{ display: 'grid', gap: 3 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Enroute</span>
-            <button
-              type="button"
-              onClick={() => setShowAllEnroute(v => !v)}
-              aria-pressed={showAllEnroute}
-              aria-label={showAllEnroute ? 'Show top 10 enroute flights' : 'Show all enroute flights'}
-              style={{
-                marginTop: 0,
-                borderRadius: 5,
-                border: '1px solid var(--panel-border)',
-                background: 'var(--panel-strong)',
-                color: 'var(--text)',
-                fontSize: 11,
-                fontWeight: 600,
-                padding: '6px 9px',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {showAllEnroute ? 'ALL' : `TOP ${MAX_ENROUTE}`}
-            </button>
-          </label>
         </div>
       </div>
 
