@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import HUDBar from './components/HUDBar'
 import FlightMap from './components/FlightMap'
 import NearbyList from './components/NearbyList'
@@ -47,8 +47,6 @@ export default function App() {
     if (typeof window === 'undefined') return 1360
     return window.innerWidth
   })
-  const searchInputRef = useRef(null)
-
   const [viewMode, setViewMode] = useState(MODE_LIVE)
   const [historyWindowMs, setHistoryWindowMs] = useState(HISTORY_WINDOWS[0].ms)
   const [timelapsePlaying, setTimelapsePlaying] = useState(true)
@@ -212,20 +210,6 @@ export default function App() {
         handleClose()
         return
       }
-
-      if (event.key !== '/') return
-      const active = document.activeElement
-      const isTyping =
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        active instanceof HTMLSelectElement ||
-        active?.isContentEditable
-
-      if (isTyping) return
-
-      event.preventDefault()
-      searchInputRef.current?.focus()
-      searchInputRef.current?.select()
     }
 
     window.addEventListener('keydown', onGlobalKeyDown)
@@ -313,7 +297,6 @@ export default function App() {
           flights={activeFlights}
           selectedId={effectiveSelectedId}
           onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
-          searchInputRef={searchInputRef}
           width={listWidth}
           loading={loading}
           error={error}
