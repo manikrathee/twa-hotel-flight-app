@@ -12,6 +12,11 @@ const LIST_PANEL_MIN = 320
 const LIST_PANEL_MAX = 560
 const DETAIL_PANEL_MIN = 420
 const DETAIL_PANEL_MAX = 760
+const PANEL_COLLAPSED_WIDTH = 50
+const LIST_PANEL_MIN_RESPONSIVE = 220
+const DETAIL_PANEL_MIN_RESPONSIVE = 260
+const AUTO_COLLAPSE_LIST_AT = 1040
+const AUTO_COLLAPSE_DETAIL_AT = 680
 const VIEWPORT_LIST_RATIO = { normal: 0.30, constrained: 0.24 }
 const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.22, constrained: 0.18 }
 const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
@@ -45,6 +50,10 @@ export default function App() {
   const [selectedSource, setSelectedSource] = useState(MODE_LIVE)
   const [track, setTrack] = useState(null)
   const [runwayAlert, setRunwayAlert] = useState(null)
+  const [listCollapsed, setListCollapsed] = useState(false)
+  const [detailCollapsed, setDetailCollapsed] = useState(false)
+  const [listExpandedOverride, setListExpandedOverride] = useState(false)
+  const [detailExpandedOverride, setDetailExpandedOverride] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() => {
     if (typeof window === 'undefined') return 1360
     return window.innerWidth
@@ -79,7 +88,7 @@ export default function App() {
   const { weather } = useWeather()
   const hasFlights = flights.length > 0
   const isInitialLoad = loading && !hasFlights && !isHistoryMode
-  const constrainedMode = isConstrained || rateLimitStatus === 'blocked' || dataSource?.type === 'cache' || flights.length > 120
+  const constrainedMode = isConstrained || rateLimitStatus === 'blocked' || dataSource?.type === 'cache'
   const widthMode = constrainedMode ? 'constrained' : 'normal'
   const activeFlights = isHistoryMode ? history.activeFlights : flights
 
@@ -125,12 +134,27 @@ export default function App() {
 
   const listWidth = useMemo(() => {
     const ratios = hasSelectedFlight ? VIEWPORT_LIST_RATIO_WITH_DETAILS : VIEWPORT_LIST_RATIO
-    return clampPanelSize(viewportWidth * ratios[widthMode], LIST_PANEL_MIN, LIST_PANEL_MAX)
+    const min = Math.min(LIST_PANEL_MIN, Math.max(LIST_PANEL_MIN_RESPONSIVE, Math.round(viewportWidth * 0.24)))
+    const max = Math.min(LIST_PANEL_MAX, Math.round(viewportWidth * (hasSelectedFlight ? 0.44 : 0.52)))
+    return clampPanelSize(viewportWidth * ratios[widthMode], min, Math.max(min, max))
   }, [viewportWidth, widthMode, hasSelectedFlight])
 
   const detailWidth = useMemo(() => {
-    return clampPanelSize(viewportWidth * VIEWPORT_DETAIL_RATIO[widthMode], DETAIL_PANEL_MIN, DETAIL_PANEL_MAX)
+    const min = Math.min(DETAIL_PANEL_MIN, Math.max(DETAIL_PANEL_MIN_RESPONSIVE, Math.round(viewportWidth * 0.31)))
+    const max = Math.min(DETAIL_PANEL_MAX, Math.round(viewportWidth * 0.64))
+    return clampPanelSize(viewportWidth * VIEWPORT_DETAIL_RATIO[widthMode], min, Math.max(min, max))
   }, [viewportWidth, widthMode])
+
+  const autoCollapseList = hasSelectedFlight && viewportWidth < AUTO_COLLAPSE_LIST_AT
+  const autoCollapseDetail = hasSelectedFlight && viewportWidth < AUTO_COLLAPSE_DETAIL_AT
+  const effectiveListCollapsed = listCollapsed || (autoCollapseList && !listExpandedOverride)
+  const effectiveDetailCollapsed = detailCollapsed || (autoCollapseDetail && !detailExpandedOverride)
+
+  const listPanelWidth = effectiveListCollapsed ? PANEL_COLLAPSED_WIDTH : listWidth
+  const detailPanelVisible = Boolean(selectedFlight)
+  const detailPanelWidth = detailPanelVisible
+    ? (effectiveDetailCollapsed ? PANEL_COLLAPSED_WIDTH : detailWidth)
+    : 0
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -146,6 +170,9 @@ export default function App() {
     setSelectedSource(MODE_LIVE)
     setTrack(null)
     setRunwayAlert(null)
+    setDetailCollapsed(false)
+    setListExpandedOverride(false)
+    setDetailExpandedOverride(false)
   }, [])
 
   const handleSelect = useCallback((icao24, source = MODE_LIVE) => {
@@ -164,6 +191,9 @@ export default function App() {
       return nextId
     })
 
+    setDetailCollapsed(false)
+    setListExpandedOverride(false)
+    setDetailExpandedOverride(false)
     if (source === MODE_LIVE) setRunwayAlert(null)
   }, [selectedSource])
 
@@ -175,6 +205,8 @@ export default function App() {
     setSelectedId(null)
     setSelectedSource(MODE_LIVE)
     setTrack(null)
+    setDetailCollapsed(false)
+    setDetailExpandedOverride(false)
   }, [])
 
   const onViewModeChange = useCallback((mode) => {
@@ -233,6 +265,24 @@ export default function App() {
   }, [activateFlight, visibleRunwayAlert])
 
   const handleRunwayAlertDismiss = useCallback(() => setRunwayAlert(null), [])
+  const toggleListCollapsed = useCallback(() => {
+    if (effectiveListCollapsed) {
+      setListCollapsed(false)
+      setListExpandedOverride(true)
+      return
+    }
+
+    setListCollapsed(true)
+    setListExpandedOverride(false)
+  }, [effectiveListCollapsed])
+  const expandDetailPanel = useCallback(() => {
+    setDetailCollapsed(false)
+    setDetailExpandedOverride(true)
+  }, [])
+  const collapseDetailPanel = useCallback(() => {
+    setDetailCollapsed(true)
+    setDetailExpandedOverride(false)
+  }, [])
 
   useEffect(() => {
     const onGlobalKeyDown = (event) => {
@@ -328,9 +378,11 @@ export default function App() {
           flights={activeFlights}
           selectedId={effectiveSelectedId}
           onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
-          width={listWidth}
+          width={listPanelWidth}
           loading={loading}
           error={error}
+          collapsed={effectiveListCollapsed}
+          onToggleCollapse={toggleListCollapsed}
         />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', minWidth: 0 }}>
@@ -341,7 +393,8 @@ export default function App() {
             onHistorySelect={isHistoryMode ? handleHistorySelect : null}
             onRunwaySelect={handleRunwaySelection}
             track={trackForMap}
-            detailPanelWidth={selectedFlight ? detailWidth : 0}
+            leftPanelWidth={listPanelWidth}
+            rightPanelWidth={detailPanelWidth}
             historyPathFeatures={isHistoryMode ? history.pathFeatures : null}
             congestionFeatures={isHistoryMode ? history.congestion : null}
             timeline={historyTimeline}
@@ -350,7 +403,7 @@ export default function App() {
             <div style={{
               position: 'absolute',
               top: 72,
-              left: 16,
+              left: listPanelWidth + 12,
               zIndex: 20,
               background: 'var(--panel-overlay-soft)',
               border: '1px solid rgba(var(--cyan-alt-rgb), 0.35)',
@@ -410,13 +463,14 @@ export default function App() {
 
         <div
           className={`detail-overlay${selectedFlight ? ' open' : ''}`}
-          style={{ width: detailWidth }}
+          style={{ width: detailPanelWidth }}
         >
-          {selectedFlight && (
+          {selectedFlight && !effectiveDetailCollapsed && (
             <FlightDetail
               key={`${selectedSource}-${selectedFlight?.icao24}`}
               flight={selectedFlight}
               onClose={handleClose}
+              onCollapse={collapseDetailPanel}
               autoFocusCloseButton
               onTrackLoad={selectedSource === MODE_LIVE ? setTrack : undefined}
               feedMode={detailFeedMode}
@@ -425,6 +479,49 @@ export default function App() {
               lastUpdated={lastUpdated}
               refreshMs={detailRefreshMs}
             />
+          )}
+          {selectedFlight && effectiveDetailCollapsed && (
+            <div style={{
+              width: '100%',
+              height: '100%',
+              background: 'var(--panel-strong)',
+              borderLeft: '1px solid var(--border-bright)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              paddingTop: 16,
+              gap: 12,
+            }}>
+              <button
+                type="button"
+                onClick={expandDetailPanel}
+                aria-label="Expand flight detail panel"
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 6,
+                  border: '1px solid rgba(var(--cyan-alt-rgb), 0.35)',
+                  background: 'rgba(var(--cyan-alt-rgb), 0.08)',
+                  color: 'var(--cyan-alt)',
+                  cursor: 'pointer',
+                  fontSize: 15,
+                  lineHeight: '28px',
+                  textAlign: 'center',
+                }}
+              >
+                ‹
+              </button>
+              <div style={{
+                writingMode: 'vertical-rl',
+                transform: 'rotate(180deg)',
+                fontSize: 10,
+                letterSpacing: 1.2,
+                color: 'var(--text-dim)',
+                fontFamily: 'var(--font-mono)',
+              }}>
+                FLIGHT DETAIL
+              </div>
+            </div>
           )}
         </div>
       </div>

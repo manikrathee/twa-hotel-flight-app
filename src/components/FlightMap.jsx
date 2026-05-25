@@ -175,6 +175,10 @@ function resolveSelectedCoords(map, selectedIcao) {
   return null
 }
 
+function toOverlayPadding(value) {
+  return Math.max(0, Math.round(Number(value) || 0))
+}
+
 function resolvePulseCoords(map, selectedIcao, selectedLng, selectedLat) {
   const fromMap = resolveSelectedCoords(map, selectedIcao)
   if (fromMap) return fromMap
@@ -190,7 +194,8 @@ export default function FlightMap({
   historyPathFeatures,
   congestionFeatures,
   timeline,
-  detailPanelWidth = 0,
+  leftPanelWidth = 0,
+  rightPanelWidth = 0,
 }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -200,14 +205,17 @@ export default function FlightMap({
   const onHistorySelectRef = useRef(null)
   const prevIcaoSetRef = useRef(null)
   const onRunwaySelectRef = useRef(onRunwaySelect)
-  const followTargetRef = useRef({ icao: null, coords: null, shiftPx: 0 })
   const flightsRef = useRef(flights)
   const onSelectRef = useRef(onSelect)
+  const lastAutoFollowMsRef = useRef(0)
+  const lastFollowIcaoRef = useRef(null)
+  const lastOverlayPaddingRef = useRef({ left: 0, right: 0 })
+  const userCameraGestureRef = useRef(false)
   const [mapReady, setMapReady] = useState(false)
   const selectedFlightForMap = useMemo(() => {
     if (!selectedFlight?.icao24) return null
     const target = normalizeFlightId(selectedFlight.icao24)
-    return flights.find(f => normalizeFlightId(f.icao24) === target) || null
+    return flights.find(f => normalizeFlightId(f.icao24) === target) || selectedFlight
   }, [flights, selectedFlight])
   const selectedFlightForTracking = selectedFlightForMap || selectedFlight
   const selectedIcao = selectedFlightForTracking?.icao24 ?? null
@@ -445,6 +453,20 @@ export default function FlightMap({
         hoverPopup.remove()
       })
 
+      const onGestureStart = () => { userCameraGestureRef.current = true }
+      const onGestureEnd = () => {
+        userCameraGestureRef.current = false
+        lastAutoFollowMsRef.current = Date.now()
+      }
+      map.on('dragstart', onGestureStart)
+      map.on('zoomstart', onGestureStart)
+      map.on('rotatestart', onGestureStart)
+      map.on('pitchstart', onGestureStart)
+      map.on('dragend', onGestureEnd)
+      map.on('zoomend', onGestureEnd)
+      map.on('rotateend', onGestureEnd)
+      map.on('pitchend', onGestureEnd)
+
       // ── Click to select ──────────────────────────────────────────────
       map.on('click', 'planes-layer', e => {
         const icao24 = e.features[0]?.properties?.icao24
@@ -597,44 +619,60 @@ export default function FlightMap({
     pulseMarkerRef.current.setLngLat(coords)
   }, [selectedIcao, selectedLng, selectedLat])
 
-  // Keep selected aircraft centered in the *viewable* map area (ignoring open detail overlay).
+  // Keep selected aircraft centered within visible map area while avoiding per-tick camera churn.
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !selectedIcao) return
-    const coords = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
-    if (!coords) return
-
+    if (!mapReady || !mapRef.current) return
     const map = mapRef.current
-    const isCurrentFlight = followTargetRef.current.icao === selectedIcao
-    const previousCoords = followTargetRef.current.coords
-    const previousShift = followTargetRef.current.shiftPx
-    const canvasWidth = map.getCanvas().clientWidth
-    if (!canvasWidth) return
+    const canvas = map.getCanvas()
+    const width = canvas.clientWidth
+    if (!width) return
 
-    const insetPx = Math.max(0, Number(detailPanelWidth) || 0)
-    const mapShift = Math.max(0, Math.min(insetPx / 2, canvasWidth / 2 - 16))
+    const padding = {
+      left: Math.max(16, toOverlayPadding(leftPanelWidth) + 10),
+      right: Math.max(16, toOverlayPadding(rightPanelWidth) + 10),
+      top: 16,
+      bottom: 16,
+    }
+    const insetsChanged = (
+      padding.left !== lastOverlayPaddingRef.current.left ||
+      padding.right !== lastOverlayPaddingRef.current.right
+    )
 
-    const movedKm = previousCoords ? distanceKm(previousCoords[1], previousCoords[0], coords[1], coords[0]) : Infinity
-    const panelShiftChanged = previousShift !== mapShift
-    const bounds = map.getBounds()
-    const isOffscreen = bounds ? !bounds.contains(coords) : false
+    const coords = selectedIcao
+      ? resolvePulseCoords(map, selectedIcao, selectedLng, selectedLat)
+      : null
+    if (!coords) {
+      if (insetsChanged) {
+        map.easeTo({ padding, duration: 160, essential: true })
+        lastOverlayPaddingRef.current = { left: padding.left, right: padding.right }
+      }
+      lastFollowIcaoRef.current = null
+      return
+    }
 
-    if (isCurrentFlight && !panelShiftChanged && !isOffscreen && movedKm < 0.30) return
+    const selectedChanged = lastFollowIcaoRef.current !== selectedIcao
+    if (userCameraGestureRef.current && !selectedChanged && !insetsChanged) return
 
-    const selectedPoint = map.project(coords)
-    const nextCenter = map.unproject([selectedPoint.x + mapShift, selectedPoint.y])
+    const targetPoint = map.project(coords)
+    const visibleWidth = Math.max(1, width - padding.left - padding.right)
+    const expectedX = padding.left + (visibleWidth / 2)
+    const driftPx = Math.abs(targetPoint.x - expectedX)
+    const nowMs = Date.now()
+    const minInterval = selectedChanged || insetsChanged ? 0 : 700
+    const shouldFollow = selectedChanged || insetsChanged || driftPx > 26
+    if (!shouldFollow || (nowMs - lastAutoFollowMsRef.current) < minInterval) return
 
     map.easeTo({
-      center: nextCenter,
-      duration: 450,
+      center: coords,
+      padding,
+      duration: selectedChanged ? 300 : 220,
       essential: true,
     })
 
-    followTargetRef.current = {
-      icao: selectedIcao,
-      coords,
-      shiftPx: mapShift,
-    }
-  }, [detailPanelWidth, mapReady, selectedIcao, selectedLat, selectedLng])
+    lastFollowIcaoRef.current = selectedIcao
+    lastOverlayPaddingRef.current = { left: padding.left, right: padding.right }
+    lastAutoFollowMsRef.current = nowMs
+  }, [leftPanelWidth, mapReady, rightPanelWidth, selectedIcao, selectedLat, selectedLng])
 
   // Draw flight path
   useEffect(() => {
@@ -653,6 +691,15 @@ export default function FlightMap({
     const allCoords = recentCoords.length < 2
       ? getTrackCoordinates(track, -1)
       : recentCoords
+    const currentLng = Number(selectedLng)
+    const currentLat = Number(selectedLat)
+    if (allCoords.length && Number.isFinite(currentLng) && Number.isFinite(currentLat)) {
+      const [tailLng, tailLat] = allCoords[allCoords.length - 1]
+      const tailGapKm = distanceKm(currentLat, currentLng, tailLat, tailLng)
+      if (Number.isFinite(tailGapKm) && tailGapKm > 0.02) {
+        allCoords.push([currentLng, currentLat])
+      }
+    }
 
     if (allCoords.length < 2) {
       src.setData({ type: 'FeatureCollection', features: [] })
@@ -664,7 +711,7 @@ export default function FlightMap({
       features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: allCoords } }],
     })
 
-  }, [selectedIcao, track, mapReady])
+  }, [mapReady, selectedIcao, selectedLat, selectedLng, track])
 
   const resetView = useCallback(() => {
     mapRef.current?.flyTo({ ...INITIAL_VIEW, duration: 900, essential: true })
@@ -767,6 +814,7 @@ export default function FlightMap({
           backdropFilter: 'blur(12px)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 2px 16px rgba(var(--cyan-alt-rgb), 0.12)',
+          maxWidth: 'min(92vw, 680px)',
           pointerEvents: 'none',
         }}>
           <div style={{
@@ -778,7 +826,15 @@ export default function FlightMap({
           <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--cyan-alt)', letterSpacing: 2.5 }}>
             VIEWING FLIGHT PATH
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(var(--cyan-alt-rgb), 0.55)', letterSpacing: 1 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'rgba(var(--cyan-alt-rgb), 0.55)',
+            letterSpacing: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
             {(selectedFlightForTracking.callsign || selectedFlightForTracking.icao24).trim()} · LAST 90 MIN
           </span>
         </div>
@@ -797,12 +853,20 @@ export default function FlightMap({
           alignItems: 'center',
           gap: 10,
           boxShadow: '0 2px 16px rgba(0, 0, 0, 0.12)',
+          maxWidth: 'min(92vw, 760px)',
           pointerEvents: 'none',
         }}>
           <span style={{ fontSize: 11, color: 'var(--red-alt)', letterSpacing: 2.5, fontWeight: 600 }}>
             {timeline.mode.toUpperCase()}
           </span>
-          <span style={{ fontSize: 10, color: 'rgba(var(--red-alt-rgb), 0.65)', letterSpacing: 0.6 }}>
+          <span style={{
+            fontSize: 10,
+            color: 'rgba(var(--red-alt-rgb), 0.65)',
+            letterSpacing: 0.6,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
             {new Date(timeline.range.startMs).toLocaleString()} → {new Date(timeline.range.endMs).toLocaleString()}
           </span>
           {timeline.mode === 'timelapse' && (

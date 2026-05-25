@@ -8,6 +8,7 @@ import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } fr
 export default function FlightDetail({
   flight,
   onClose,
+  onCollapse,
   onTrackLoad,
   preloadedTrack = null,
   lastUpdated,
@@ -148,6 +149,11 @@ export default function FlightDetail({
     : feedMode === 'history'
       ? 'HISTORY'
       : 'LIVE'
+  const telemetryGrid = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(156px, 1fr))',
+    gap: 10,
+  }
 
   return (
     <div style={{
@@ -183,22 +189,39 @@ export default function FlightDetail({
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, paddingTop: 2 }}>
-          <button
-            type="button"
-            ref={closeButtonRef}
-            aria-label={`Close details for ${flightNum || callsign}`}
-            onClick={onClose}
-            style={{
-              background: 'none', border: '1px solid var(--panel-subtle)', borderRadius: 5,
-              color: 'var(--text-dim)', cursor: 'pointer', padding: '7px 14px',
-              fontSize: 12, fontWeight: 600, letterSpacing: 0.2,
-              transition: 'border-color 0.15s, color 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--panel-divider)'; e.currentTarget.style.color = 'var(--text)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--panel-subtle)'; e.currentTarget.style.color = 'var(--text-dim)' }}
-          >
-            ✕ CLOSE
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label={`Collapse details for ${flightNum || callsign}`}
+              style={{
+                background: 'none', border: '1px solid var(--panel-subtle)', borderRadius: 5,
+                color: 'var(--text-dim)', cursor: 'pointer', padding: '7px 10px',
+                fontSize: 12, fontWeight: 600, letterSpacing: 0.2,
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--panel-divider)'; e.currentTarget.style.color = 'var(--text)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--panel-subtle)'; e.currentTarget.style.color = 'var(--text-dim)' }}
+            >
+              COLLAPSE
+            </button>
+            <button
+              type="button"
+              ref={closeButtonRef}
+              aria-label={`Close details for ${flightNum || callsign}`}
+              onClick={onClose}
+              style={{
+                background: 'none', border: '1px solid var(--panel-subtle)', borderRadius: 5,
+                color: 'var(--text-dim)', cursor: 'pointer', padding: '7px 14px',
+                fontSize: 12, fontWeight: 600, letterSpacing: 0.2,
+                transition: 'border-color 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--panel-divider)'; e.currentTarget.style.color = 'var(--text)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--panel-subtle)'; e.currentTarget.style.color = 'var(--text-dim)' }}
+            >
+              ✕ CLOSE
+            </button>
+          </div>
           <div style={{ fontSize: 12, color: phaseColor, fontWeight: 600 }}>
             {phaseArrow} {phase}
           </div>
@@ -250,7 +273,7 @@ export default function FlightDetail({
         {/* ── Live telemetry ────────────────────────── */}
         <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--panel-line)' }}>
           <SectionLabel>LIVE TELEMETRY</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div style={{ ...telemetryGrid, marginBottom: 10 }}>
             <BigStat label="ALTITUDE" value={altFt.toLocaleString()} unit="ft"
               sub={`FL${Math.round(altFt / 100).toString().padStart(3, '0')}`} color="var(--cyan)"
               bar={Math.min(altFt / 45000, 1)} />
@@ -260,7 +283,7 @@ export default function FlightDetail({
             <BigStat label="V/RATE" value={vrFpm > 0 ? `+${vrFpm.toLocaleString()}` : vrFpm.toLocaleString()} unit="fpm"
               color={phaseColor} sub={`${phaseArrow} ${phase}`} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={telemetryGrid}>
             <BigStat label="HEADING" value={`${hdg}°`} unit="" sub={cardinal} color="var(--text)" />
             <BigStat label="DIST · JFK" value={distMi} unit="mi"
               sub={`${Math.round(flight.distKm)} km`} color="var(--text)" />
@@ -273,13 +296,13 @@ export default function FlightDetail({
             }
           </div>
           {geoAltFt && lastContactLagSec !== null && (
-            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            <div style={{ ...telemetryGrid, marginTop: 10 }}>
               <BigStat label="GEO ALT" value={geoAltFt.toLocaleString()} unit="ft"
                 sub={altDeltaFt != null ? `Δ ${altDeltaFt > 0 ? '+' : ''}${altDeltaFt} ft` : null}
                 color="var(--text-dim)" />
             </div>
           )}
-          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ ...telemetryGrid, marginTop: 10 }}>
             {positionAgeSec !== null && (
               <BigStat label="FIX AGE" value={formatAgeSeconds(positionAgeSec)}
                 sub="position timestamp" color={ageColor(positionAgeSec)} />
@@ -293,7 +316,7 @@ export default function FlightDetail({
                 sub="position source" color="var(--cyan)" />
             )}
           </div>
-          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div style={{ ...telemetryGrid, marginTop: 10 }}>
             {statusLabel && (
               <BigStat label="STATUS" value={statusLabel}
                 sub={flight.spi ? 'special position ident' : 'normal transponder'} color={statusColor} />

@@ -6,6 +6,10 @@ import { metersToFeet, msToKnots } from '../utils/geo'
 const KM_APPROACH = 16
 const KM_TERMINAL = 48
 
+function normalizeFlightId(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
 function sortFlightsByDistance(flights) {
   return [...flights].sort((a, b) => (a.distKm || Infinity) - (b.distKm || Infinity))
 }
@@ -36,7 +40,7 @@ function ZoneHeader({ label, count, color, sublabel }) {
   )
 }
 
-function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
+function NearbyList({ flights, selectedId, onSelect, width, loading, error, collapsed = false, onToggleCollapse }) {
   const deferredFlights = useDeferredValue(flights)
   const sortedFlights = useMemo(() => sortFlightsByDistance(deferredFlights), [deferredFlights])
 
@@ -72,6 +76,74 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
         ? 'Acquiring nearby traffic…'
         : 'No nearby traffic in range.'
 
+  if (collapsed) {
+    return (
+      <div style={{
+        width,
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        zIndex: 180,
+        height: 'calc(100% - 32px)',
+        background: 'rgba(7, 13, 21, 0.88)',
+        backdropFilter: 'blur(10px) saturate(1.08)',
+        border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
+        borderRadius: 14,
+        boxShadow: '0 22px 52px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        paddingTop: 12,
+        gap: 12,
+      }}>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label="Expand nearby traffic panel"
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 6,
+            border: '1px solid rgba(var(--cyan-alt-rgb), 0.35)',
+            background: 'rgba(var(--cyan-alt-rgb), 0.08)',
+            color: 'var(--cyan-alt)',
+            cursor: 'pointer',
+            fontSize: 15,
+            lineHeight: '28px',
+            textAlign: 'center',
+          }}
+        >
+          ›
+        </button>
+        <div style={{
+          writingMode: 'vertical-rl',
+          transform: 'rotate(180deg)',
+          fontSize: 10,
+          letterSpacing: 1.2,
+          color: 'var(--text-dim)',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          NEARBY TRAFFIC
+        </div>
+        <div style={{
+          marginTop: 'auto',
+          marginBottom: 12,
+          minWidth: 28,
+          textAlign: 'center',
+          borderRadius: 999,
+          border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
+          background: 'rgba(var(--cyan-alt-rgb), 0.14)',
+          color: 'var(--cyan)',
+          padding: '2px 6px',
+          fontSize: 11,
+          fontWeight: 600,
+        }}>
+          {totalShownLabel}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       width,
@@ -81,7 +153,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
       zIndex: 180,
       maxHeight: 'calc(100% - 32px)',
       background: 'rgba(7, 13, 21, 0.88)',
-      backdropFilter: 'blur(18px) saturate(1.16)',
+      backdropFilter: 'blur(12px) saturate(1.1)',
       border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
       borderRadius: 14,
       boxShadow: '0 22px 52px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)',
@@ -102,20 +174,41 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
         <div style={{ fontSize: 14, color: 'var(--heading)', fontWeight: 700 }}>
           NEARBY TRAFFIC
         </div>
-        <div style={{
-          fontSize: 13, color: 'var(--cyan)',
-          background: 'rgba(var(--cyan-alt-rgb), 0.14)', padding: '2px 9px', borderRadius: 999,
-          border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
-          fontWeight: 600,
-        }}>
-          {totalShownLabel} shown
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            fontSize: 13, color: 'var(--cyan)',
+            background: 'rgba(var(--cyan-alt-rgb), 0.14)', padding: '2px 9px', borderRadius: 999,
+            border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
+            fontWeight: 600,
+          }}>
+            {totalShownLabel} shown
+          </div>
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="Collapse nearby traffic panel"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              border: '1px solid rgba(var(--text-soft-rgb), 0.35)',
+              background: 'rgba(var(--text-soft-rgb), 0.06)',
+              color: 'var(--text-dim)',
+              cursor: 'pointer',
+              fontSize: 15,
+              lineHeight: '26px',
+              textAlign: 'center',
+            }}
+          >
+            ‹
+          </button>
         </div>
       </div>
 
       {/* Column headers */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 68px 74px',
+        gridTemplateColumns: 'minmax(0, 1fr) 60px 64px',
         gap: 0,
         padding: '8px 16px 8px 18px',
         borderBottom: '1px solid var(--panel-line)',
@@ -127,7 +220,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
       </div>
 
       {/* Flight list — grouped by proximity zone */}
-      <div style={{ flex: '0 1 auto', overflowY: 'auto' }}>
+      <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
         {totalShown === 0 && (
           <div role="status" aria-live="polite" aria-atomic="true" style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center' }}>
             {showNoData ? 'No nearby traffic in range.' : emptyMessage}
@@ -138,7 +231,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
           <>
             <ZoneHeader label="APPROACH" count={approach.length} color="var(--amber)" sublabel="< 10mi" />
             {approach.map(f => (
-              <FlightRow key={f.icao24} flight={f} selected={f.icao24 === selectedId} onSelect={onSelect} />
+              <FlightRow key={f.icao24} flight={f} selected={normalizeFlightId(f.icao24) === normalizeFlightId(selectedId)} onSelect={onSelect} />
             ))}
           </>
         )}
@@ -147,7 +240,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
           <>
             <ZoneHeader label="TERMINAL AREA" count={terminal.length} color="var(--cyan)" sublabel="10 – 30mi" />
             {terminal.map(f => (
-              <FlightRow key={f.icao24} flight={f} selected={f.icao24 === selectedId} onSelect={onSelect} />
+              <FlightRow key={f.icao24} flight={f} selected={normalizeFlightId(f.icao24) === normalizeFlightId(selectedId)} onSelect={onSelect} />
             ))}
           </>
         )}
@@ -161,7 +254,7 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error }) {
               sublabel="> 30mi"
             />
             {enroute.map(f => (
-              <FlightRow key={f.icao24} flight={f} selected={f.icao24 === selectedId} onSelect={onSelect} />
+              <FlightRow key={f.icao24} flight={f} selected={normalizeFlightId(f.icao24) === normalizeFlightId(selectedId)} onSelect={onSelect} />
             ))}
           </>
         )}
@@ -196,7 +289,7 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
         padding: '10px 14px 10px 16px',
         cursor: 'pointer',
         display: 'grid',
-        gridTemplateColumns: '1fr 68px 74px',
+        gridTemplateColumns: 'minmax(0, 1fr) 60px 64px',
         gap: 0,
         alignItems: 'center',
         textAlign: 'left',
@@ -208,16 +301,19 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'rgba(var(--text-soft-rgb), 0.06)' }}
       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent' }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{
           fontSize: 14,
           color: selected ? 'var(--cyan)' : 'var(--heading)',
           letterSpacing: 0.1,
           fontWeight: 600,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}>
           {fn}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {airline ? airline.replace(' Airlines', '').replace(' Airways', '') : flight.origin_country}
           <span style={{ color: 'rgba(var(--text-soft-rgb), 0.35)', margin: '0 7px' }}>·</span>
           <span style={{ color: distMi <= 5 ? 'var(--amber)' : 'var(--text-dim)' }}>{distMi}mi</span>
@@ -252,6 +348,8 @@ const areNearbyListEqual = (prev, next) =>
   prev.error === next.error &&
   prev.selectedId === next.selectedId &&
   prev.width === next.width &&
-  prev.onSelect === next.onSelect
+  prev.collapsed === next.collapsed &&
+  prev.onSelect === next.onSelect &&
+  prev.onToggleCollapse === next.onToggleCollapse
 
 export default memo(NearbyList, areNearbyListEqual)
