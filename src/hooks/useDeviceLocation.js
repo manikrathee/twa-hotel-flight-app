@@ -61,6 +61,37 @@ function makeState({ center, source, error, accuracy = null, lastUpdatedMs = nul
   }
 }
 
+function withSearchRadius(state, radiusMi) {
+  return {
+    ...state,
+    radiusMi: clampRadiusMi(radiusMi, radiusMi),
+  }
+}
+
+function makeDeviceUnavailableState(errorMessage) {
+  return makeState({
+    center: null,
+    source: UNAVAILABLE_SOURCE,
+    error: errorMessage,
+    accuracy: null,
+    lastUpdatedMs: null,
+  })
+}
+
+function makeFallbackLocationState(fallback, fallbackRadiusMi) {
+  if (!fallback) return null
+  return withSearchRadius(
+    makeState({
+      center: { lat: fallback.lat, lon: fallback.lon },
+      source: FALLBACK_SOURCE,
+      error: null,
+      accuracy: fallback.accuracy,
+      lastUpdatedMs: fallback.timestamp,
+    }),
+    fallbackRadiusMi,
+  )
+}
+
 export default function useDeviceLocation({
   enabled = true,
   fallbackCenter = null,
@@ -73,31 +104,30 @@ export default function useDeviceLocation({
     fallbackCenter?.accuracy,
   ])
 
-  const fallbackState = fallback
-    ? makeState({
-      center: { lat: fallback.lat, lon: fallback.lon },
-      source: FALLBACK_SOURCE,
-      error: null,
-      accuracy: fallback.accuracy,
-      lastUpdatedMs: fallback.timestamp,
-    })
-    : null
+  const fallbackState = useMemo(
+    () => makeFallbackLocationState(fallback, fallbackRadiusMi),
+    [fallback, fallbackRadiusMi]
+  )
+  const hasGeolocation = typeof navigator !== 'undefined' && Boolean(navigator.geolocation)
+  const unavailableState = useMemo(() => {
+    if (!enabled) return withSearchRadius(makeDeviceUnavailableState('Location lookup disabled by host config'), fallbackRadiusMi)
+    if (!hasGeolocation) {
+      if (fallbackState) return fallbackState
+      return withSearchRadius(makeDeviceUnavailableState('Geolocation is unavailable in this browser'), fallbackRadiusMi)
+    }
+    return null
+  }, [enabled, hasGeolocation, fallbackRadiusMi, fallbackState])
 
   const [state, setState] = useState(() => {
-    const initial = fallback ? {
-      center: { lat: fallback.lat, lon: fallback.lon },
-      source: FALLBACK_SOURCE,
-      error: null,
-      accuracy: fallback.accuracy,
-      lastUpdatedMs: fallback.timestamp,
-    } : {
+    if (unavailableState) return unavailableState
+
+    const initial = {
       center: null,
-      source: enabled ? LOADING_SOURCE : UNAVAILABLE_SOURCE,
-      error: enabled ? null : 'Location lookup disabled by host config',
+      source: LOADING_SOURCE,
+      error: null,
       accuracy: null,
       lastUpdatedMs: null,
     }
-
     const base = makeState({
       center: initial.center,
       source: initial.source,
@@ -111,41 +141,7 @@ export default function useDeviceLocation({
   })
 
   useEffect(() => {
-    if (!enabled) {
-      setState((prev) => ({
-        ...prev,
-        source: UNAVAILABLE_SOURCE,
-        error: 'Location lookup disabled by host config',
-        isReady: false,
-        isDeviceLocation: false,
-        isLoading: false,
-      }))
-      return
-    }
-
-    if (!window || !window.navigator || !window.navigator.geolocation) {
-      if (fallbackState) {
-        setState({
-          ...fallbackState,
-          radiusMi: clampRadiusMi(fallbackRadiusMi, fallbackRadiusMi),
-          isLoading: false,
-          isDeviceLocation: false,
-          isReady: true,
-        })
-        return
-      }
-
-      setState(prev => ({
-        ...prev,
-        center: null,
-        source: UNAVAILABLE_SOURCE,
-        error: 'Geolocation is unavailable in this browser',
-        isReady: false,
-        isDeviceLocation: false,
-        isLoading: false,
-      }))
-      return
-    }
+    if (unavailableState) return
 
     let mounted = true
 
@@ -227,7 +223,7 @@ export default function useDeviceLocation({
       mounted = false
       if (watchId != null) navigator.geolocation.clearWatch(watchId)
     }
-  }, [enabled, fallbackState, fallbackRadiusMi, timeoutMs, fallback?.lat, fallback?.lon])
+  }, [fallbackRadiusMi, fallbackState, timeoutMs, unavailableState])
 
-  return state
+  return unavailableState || state
 }

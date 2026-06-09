@@ -861,13 +861,9 @@ function closestYearPeers(sortedPeers, code) {
 
   return [...sortedPeers]
     .filter(peer => peer.code !== code)
-    .map(peer => ({
-      ...peer,
-      delta: Math.abs(peer.founded - current.founded),
-    }))
-    .sort((a, b) => a.delta - b.delta)
+    .sort((a, b) => Math.abs(a.founded - current.founded) - Math.abs(b.founded - current.founded))
     .slice(0, 3)
-    .map(({ delta, ...peer }) => peer)
+    .map(peer => ({ ...peer }))
 }
 
 function buildAircraftContext(facts, typeCode, model) {
