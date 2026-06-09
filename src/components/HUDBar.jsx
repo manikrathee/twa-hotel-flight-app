@@ -32,7 +32,9 @@ function DataSourceBadge({ dataSource }) {
   const isFallback = type === 'fallback'
   const cachedAtMs = dataSource?.cachedAt ? dataSource.cachedAt.getTime() : null
   const [nowMs, setNowMs] = useState(() => Date.now())
-  const sourceLabel = isFallback ? `FALLBACK: ${(dataSource?.source || 'JFK feed').toUpperCase()}` : 'DB CACHE'
+  const sourceLabel = isFallback
+    ? `FALLBACK: ${(dataSource?.source || 'fallback feed').toUpperCase()}`
+    : 'DB CACHE'
 
   useEffect(() => {
     if (!(isCached && cachedAtMs)) return
@@ -88,6 +90,7 @@ function ModeControls({
   hasHistoryData,
 }) {
   const canUseWindow = viewMode !== 'live'
+  const canControlTimelapse = viewMode === 'timelapse' && hasHistoryData
 
   return (
     <div style={{
@@ -159,30 +162,25 @@ function ModeControls({
       <button
         type="button"
         onClick={() => onTimelapsePlayingChange(!timelapsePlaying)}
-        disabled={viewMode !== 'timelapse' || !hasHistoryData}
-        aria-label={timelapsePlaying ? 'Pause timelapse replay' : 'Play timelapse replay'}
+        disabled={!canControlTimelapse}
+        aria-label={canControlTimelapse
+          ? (timelapsePlaying ? 'Pause timelapse replay' : 'Play timelapse replay')
+          : 'Timelapse disabled until history loads'}
         style={{
           borderRadius: 5,
           border: '1px solid var(--panel-border)',
           background: 'var(--panel-strong)',
-          color: timelapsePlaying ? 'var(--green)' : 'var(--text)',
+          color: canControlTimelapse && timelapsePlaying ? 'var(--green)' : 'var(--text)',
           fontSize: 11,
           fontWeight: 600,
           padding: '5px 7px',
           whiteSpace: 'nowrap',
-          opacity: viewMode === 'timelapse' && hasHistoryData ? 1 : 0.5,
+          opacity: canControlTimelapse ? 1 : 0.5,
         }}
       >
-        {timelapsePlaying ? '⏸ Pause' : '▶ Play'}
+        {canControlTimelapse ? (timelapsePlaying ? '⏸ Pause' : '▶ Play') : '▶ Play'}
       </button>
 
-      <span style={{
-        color: 'var(--text-dim)',
-        whiteSpace: 'nowrap',
-        fontSize: 10,
-      }}>
-        {hasHistoryData ? 'HISTORY READY' : 'NO HISTORY'}
-      </span>
     </div>
   )
 }

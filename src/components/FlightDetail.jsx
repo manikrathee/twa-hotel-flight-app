@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import useFlightDetail from '../hooks/useFlightDetail'
-import AircraftRender from './AircraftRender'
 import FlightPath from './FlightPath'
-import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel } from '../utils/aircraft'
+import { AIRCRAFT_FACTS, AIRLINE_FACTS } from '../data/aviationFacts'
+import { getAircraftFacts, getAirlineFacts, getAirlineName, parseFlightNumber, modelLabel, airlinePrefix } from '../utils/aircraft'
 import { distanceMiles, metersToFeet, msToKnots, headingToCardinal, msTofpm } from '../utils/geo'
 
 export default function FlightDetail({
@@ -77,6 +77,13 @@ export default function FlightDetail({
   const dossierRange = aircraftFacts?.rangeNm ? `${aircraftFacts.rangeNm.toLocaleString()} nm` : 'Range depends on configuration'
   const dossierHistory = aircraftFacts?.history || inferHistoryLabel({ model: displayModel, manufacturer, typeCode, route, routeMiles, flightNum })
 
+  const aircraftContext = buildAircraftContext(aircraftFacts, typeCode, displayModel)
+  const airlineCode = resolveAirlineCode(route?.airline, callsign)
+  const airlineSnapshot = buildAirlineSnapshot({
+    code: airlineCode,
+    alliance: airlineFacts?.alliance,
+  })
+
   // Contact freshness
   const lastContactLagSec = flight.last_contact
     ? Math.max(0, Math.floor(nowMs / 1000) - flight.last_contact)
@@ -144,23 +151,21 @@ export default function FlightDetail({
   const updatedLabel = lastUpdated
     ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
     : null
-  const sourceLabel = feedMode === 'fallback'
-    ? 'FALLBACK'
-    : feedMode === 'history'
-      ? 'HISTORY'
-      : 'LIVE'
   const telemetryGrid = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(156px, 1fr))',
     gap: 10,
   }
+  const sectionDelay = (step) => ({ animationDelay: `${Math.max(0, step) * 58}ms` })
+  const recentTrackWindowMinutes = 90
+  const pathTrack = useMemo(() => trimTrackToRecentWindow(track, recentTrackWindowMinutes), [track, recentTrackWindowMinutes])
 
   return (
-    <div style={{
+    <div
+      className="detail-panel-shell"
+      style={{
       width: '100%',
       height: '100%',
-      background: 'var(--panel-strong)',
-      borderLeft: '1px solid var(--border-bright)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
@@ -168,7 +173,10 @@ export default function FlightDetail({
     }}>
 
       {/* ── Header ───────────────────────────────────── */}
-      <div style={{
+      <div
+        className="detail-section-shell"
+        style={{
+          ...sectionDelay(0),
         padding: '14px 22px 12px',
         borderBottom: '1px solid var(--panel-line)',
         display: 'flex',
@@ -227,7 +235,7 @@ export default function FlightDetail({
           </div>
           {(refreshSec || updatedLabel) && (
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--green)', letterSpacing: 0.8 }}>
-          {sourcePositionLabel}
+              {sourcePositionLabel ? `${sourcePositionLabel}` : ''}
               {refreshSec ? ` · ${refreshSec}s refresh` : ''}
               {updatedLabel ? ` · ${updatedLabel}` : ''}
             </div>
@@ -238,40 +246,39 @@ export default function FlightDetail({
       <div style={{ flex: 1, overflowY: 'auto' }}>
 
         {/* ── Aircraft hero ─────────────────────────── */}
-        <div style={{
+        <div
+          className="detail-section-shell"
+          style={{
+            ...sectionDelay(1),
           padding: '16px 22px',
           borderBottom: '1px solid var(--panel-line)',
-          display: 'flex', alignItems: 'flex-start', gap: 16,
           background: 'linear-gradient(135deg, rgba(var(--cyan-alt-rgb), 0.045) 0%, transparent 60%)',
         }}>
-          <div style={{ flexShrink: 0 }}>
-            <AircraftRender typeCode={typeCode} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600, letterSpacing: 0.2 }}>AIRCRAFT</div>
-            {displayModel && (
-              <div style={{ fontSize: 15, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
-                {displayModel}
-              </div>
-            )}
-            {registration && (
-              <div style={{ fontSize: 13, color: 'var(--cyan)', marginTop: 5, fontWeight: 600 }}>
-                {registration}
-              </div>
-            )}
-            {owner && owner !== airline && (
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>op. {owner}</div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-              <IdentBadge label="ICAO" value={flight.icao24?.toUpperCase()} />
-              {squawk && <IdentBadge label="SQWK" value={sqLabel} alert={sqAlert} />}
-              {flight.origin_country && <IdentBadge label="COUNTRY" value={flight.origin_country} />}
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600, letterSpacing: 0.2 }}>AIRCRAFT</div>
+          {displayModel && (
+            <div style={{ fontSize: 15, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.2 }}>
+              {displayModel}
             </div>
+          )}
+          {registration && (
+            <div style={{ fontSize: 13, color: 'var(--cyan)', marginTop: 5, fontWeight: 600 }}>
+              {registration}
+            </div>
+          )}
+          {owner && owner !== airline && (
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>op. {owner}</div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <IdentBadge label="ICAO" value={flight.icao24?.toUpperCase()} />
+            {squawk && <IdentBadge label="SQWK" value={sqLabel} alert={sqAlert} />}
+            {flight.origin_country && <IdentBadge label="COUNTRY" value={flight.origin_country} />}
           </div>
         </div>
 
         {/* ── Live telemetry ────────────────────────── */}
-        <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--panel-line)' }}>
+        <div
+          className="detail-section-shell"
+          style={{ ...sectionDelay(2), padding: '16px 22px', borderBottom: '1px solid var(--panel-line)' }}>
           <SectionLabel>LIVE TELEMETRY</SectionLabel>
           <div style={{ ...telemetryGrid, marginBottom: 10 }}>
             <BigStat label="ALTITUDE" value={altFt.toLocaleString()} unit="ft"
@@ -311,8 +318,8 @@ export default function FlightDetail({
               <BigStat label="LAST SEEN" value={formatAgeSeconds(contactAgeSec)}
                 sub="transponder contact" color={ageColor(contactAgeSec)} />
             )}
-            {sourceLabel && (
-            <BigStat label="SOURCE" value={sourcePositionLabel}
+            {sourcePositionLabel && (
+              <BigStat label="SOURCE" value={sourcePositionLabel}
                 sub="position source" color="var(--cyan)" />
             )}
           </div>
@@ -333,7 +340,9 @@ export default function FlightDetail({
         </div>
 
         {/* ── Altitude profile ──────────────────────── */}
-        <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
+        <div
+          className="detail-section-shell"
+          style={{ ...sectionDelay(3), padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <SectionLabel>ALTITUDE PROFILE</SectionLabel>
             <span style={{ fontSize: 13, color: 'var(--cyan)', fontWeight: 600 }}>
@@ -345,7 +354,9 @@ export default function FlightDetail({
 
         {/* ── Route ────────────────────────────────── */}
         {(origin || dest) && (
-          <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
+          <div
+            className="detail-section-shell"
+            style={{ ...sectionDelay(4), padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
             <SectionLabel>ROUTE</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2 }}>
               <AirportBadge airport={origin} />
@@ -410,7 +421,7 @@ export default function FlightDetail({
         )}
 
         {/* ── Position & Identification ────────────── */}
-        <DossierSection title="POSITION & IDENTIFICATION">
+        <DossierSection title="POSITION & IDENTIFICATION" style={sectionDelay(6)}>
           {flight.latitude  != null && <InfoRow label="Latitude"  value={`${flight.latitude.toFixed(5)}°N`} mono />}
           {flight.longitude != null && <InfoRow label="Longitude" value={`${Math.abs(flight.longitude).toFixed(5)}°${flight.longitude < 0 ? 'W' : 'E'}`} mono />}
           <InfoRow label="ICAO 24-bit" value={flight.icao24?.toUpperCase()} mono />
@@ -427,22 +438,60 @@ export default function FlightDetail({
         </DossierSection>
 
         {/* ── Aircraft dossier ──────────────────────── */}
-        <DossierSection title="AIRCRAFT DOSSIER">
-          <InfoRow label="Manufacturer" value={manufacturer} />
-          <InfoRow label="Model" value={displayModel} />
-          <InfoRow label="Type code" value={typeCode?.toUpperCase() || 'Route inferred'} mono />
-          <InfoRow label="Role" value={dossierRole} />
-          <InfoRow label="Capacity" value={dossierSeats} />
-          <InfoRow label="Wake turbulence" value={dossierWake} />
-          <InfoRow label="Length" value={dossierLength} />
-          <InfoRow label="Wingspan" value={dossierWingspan} />
-          <InfoRow label="Range" value={dossierRange} />
-          <InfoRow label="History / Notes" value={dossierHistory} />
+        <DossierSection title="AIRCRAFT DOSSIER" style={sectionDelay(7)}>
+          <SectionLead>
+            Baselines are derived from type metadata + live ADS-B snippets. Carrier cabin layouts vary, so seat count and range are operational context, not hard certainties.
+          </SectionLead>
+          <ContextMetric
+            label="Aircraft profile"
+            value={displayModel || 'Route inferred'}
+            context={aircraftContext?.sizeLabel || 'Model profile prepared from known fleet references.'}
+          />
+          <MetricGrid>
+            <MetricWithPercent
+              label="Capacity"
+              value={dossierSeats}
+              context="Typical passenger envelope by operator configuration"
+              percentile={aircraftContext?.capacityPercentile}
+              barLabel="aircraft sizing"
+            />
+            <MetricWithPercent
+              label="Range"
+              value={dossierRange}
+              context="Estimated max mission distance for this class"
+              percentile={aircraftContext?.rangePercentile}
+              barLabel="range vs fleet"
+            />
+            <MetricWithPercent
+              label="Wake category"
+              value={dossierWake}
+              context={`Role bucket: ${dossierRole}`}
+            />
+            <MetricWithPercent
+              label="Length"
+              value={dossierLength}
+              context="Relative physical footprint"
+              percentile={aircraftContext?.lengthPercentile}
+              barLabel="size"
+            />
+            <MetricWithPercent
+              label="Wingspan"
+              value={dossierWingspan}
+              context={`Family: ${aircraftFacts?.family || 'Unknown family class'}`}
+              percentile={aircraftContext?.wingspanPercentile}
+              barLabel="wing footprint"
+            />
+          </MetricGrid>
+          <InfoRow
+            label="History / Notes"
+            value={dossierHistory}
+            color="var(--text-dim)"
+          />
         </DossierSection>
 
         {/* ── Airline dossier ───────────────────────── */}
         {(airlineFacts || route?.airline) && (
-          <DossierSection title="AIRLINE DOSSIER">
+          <DossierSection title="AIRLINE DOSSIER" style={sectionDelay(8)}>
             <InfoRow label="Airline" value={route?.airline?.name || airline} />
             {(route?.airline?.iata || route?.airline?.icao) && (
               <InfoRow label="IATA / ICAO" value={[route.airline.iata, route.airline.icao].filter(Boolean).join(' / ')} mono />
@@ -451,11 +500,80 @@ export default function FlightDetail({
             <InfoRow label="Founded" value={airlineFacts?.founded} />
             <InfoRow label="Headquarters" value={airlineFacts?.hq} />
             <InfoRow label="Alliance" value={airlineFacts?.alliance} />
+            {airlineSnapshot?.summary && (
+              <InfoRow
+                label="Fleet-context note"
+                value={airlineSnapshot.summary}
+                mono
+                color="var(--text-dim)"
+              />
+            )}
+          </DossierSection>
+        )}
+
+        {/* ── Airline comparison ─────────────────────── */}
+        {airlineSnapshot?.peerSummary && (
+          <DossierSection title="AIRLINE COMPARISON" style={sectionDelay(9)}>
+            <SectionLead>
+              Peer comparison uses registered carriers in the local airline dataset and current alliance context.
+            </SectionLead>
+            <MetricWithPercent
+              label="Founding year vs peers"
+              value={airlineFacts?.founded || '—'}
+              context={airlineSnapshot.peerSummary.context}
+              percentile={airlineSnapshot.peerSummary.percentile}
+              barLabel="founding position"
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <MiniKV
+                label="Peer sample"
+                value={`${airlineSnapshot.peerSummary.sampleSize} carriers`}
+              />
+              <MiniKV
+                label="Reference cohort"
+                value={airlineSnapshot.peerSummary.label}
+              />
+              {Number.isFinite(airlineSnapshot.peerSummary.spanYears) && (
+                <MiniKV
+                  label="Founding span"
+                  value={`${airlineSnapshot.peerSummary.spanYears} years`}
+                />
+              )}
+              {Number.isFinite(airlineSnapshot.peerSummary.minFounded) && Number.isFinite(airlineSnapshot.peerSummary.maxFounded) && (
+                <MiniKV
+                  label="Peer range"
+                  value={`${airlineSnapshot.peerSummary.minFounded} - ${airlineSnapshot.peerSummary.maxFounded}`}
+                />
+              )}
+            </div>
+            {airlineSnapshot.peerSummary.closestPeers.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 5 }}>Closest peers by founding year</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {airlineSnapshot.peerSummary.closestPeers.map(peer => (
+                    <span
+                      key={peer.code}
+                      style={{
+                        fontSize: 11,
+                        border: '1px solid var(--panel-border)',
+                        borderRadius: 999,
+                        padding: '4px 8px',
+                        background: 'var(--panel-subtle)',
+                        color: peer.code === airlineCode ? 'var(--cyan)' : 'var(--text)',
+                      }}>
+                      {peer.code} · {peer.founded}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </DossierSection>
         )}
 
         {/* ── Flight path ───────────────────────────── */}
-        <div style={{ padding: '14px 22px 24px' }}>
+        <div
+          className="detail-section-shell"
+          style={{ ...sectionDelay(10), padding: '14px 22px 24px' }}>
           <button
             type="button"
             aria-expanded={showPath}
@@ -476,23 +594,28 @@ export default function FlightDetail({
             <span style={{ fontSize: 12, letterSpacing: 0.2, fontWeight: 600 }}>
               FLIGHT PATH
               <span style={{ marginLeft: 8, opacity: 0.6 }}>
-                {track ? '· READY' : loading ? '· LOADING' : '· NO DATA'}
+                {pathTrack ? '· READY (RECENT WINDOW)' : loading ? '· LOADING' : '· NO DATA'}
               </span>
             </span>
             <span style={{ fontSize: 13, display: 'inline-block', transform: showPath ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
           </button>
           <div id="flight-path-panel" style={{ marginTop: 14, display: showPath ? 'block' : 'none' }}>
-            {showPath && track && (
+            {showPath && pathTrack && (
               <div style={{ animation: 'fade-in 0.2s ease' }}>
-                <FlightPath track={track} route={route} />
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ marginBottom: 6, fontSize: 10, color: 'var(--text-dim)' }}>
+                    Showing the most recent {recentTrackWindowMinutes} minutes
+                  </div>
+                </div>
+                <FlightPath track={pathTrack} route={route} />
               </div>
             )}
-            {showPath && !track && loading && (
+            {showPath && !pathTrack && loading && (
               <div role="status" aria-live="polite" style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
                 Fetching path data…
               </div>
             )}
-            {showPath && !track && !loading && (
+            {showPath && !pathTrack && !loading && (
               <div role="status" aria-live="polite" aria-atomic="true" style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
                 No path data available
               </div>
@@ -506,6 +629,27 @@ export default function FlightDetail({
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function trimTrackToRecentWindow(track, minutes) {
+  if (!track?.path?.length) return track || null
+  if (!Number.isFinite(minutes) || minutes <= 0) return track
+
+  const latestPoint = track.path[track.path.length - 1]
+  const latestTs = Number(latestPoint?.[0])
+  if (!Number.isFinite(latestTs)) return track
+
+  const cutoff = latestTs - (minutes * 60)
+  const trimmed = track.path.filter(point => {
+    const ts = Number(point?.[0])
+    return Number.isFinite(ts) && ts >= cutoff
+  })
+
+  if (trimmed.length < 2) return null
+  return {
+    ...track,
+    path: trimmed,
+  }
+}
 
 function routeDistanceMiles(origin, dest) {
   if (!origin || !dest) return null
@@ -605,12 +749,257 @@ function cleanText(value) {
   return clean
 }
 
+function resolveAirlineCode(airline, callsign) {
+  const preferred = cleanText(airline?.icao) || cleanText(airline?.iata)
+  if (preferred) return preferred.toUpperCase()
+  return cleanText(airlinePrefix(callsign))?.toUpperCase() || null
+}
+
+function toNumericYear(value) {
+  const year = Number.parseInt(cleanText(value), 10)
+  return Number.isFinite(year) ? year : null
+}
+
+function buildAirlineSnapshot({ code, alliance }) {
+  const normalizedAlliance = normalizeAlliance(alliance)
+  const snapshot = summarizeAirlinePeers({
+    code,
+    allianceLabel: normalizedAlliance,
+  })
+
+  if (!snapshot) return null
+
+  const allianceLabel = snapshot.peers.length >= 12
+    ? `${snapshot.peers.length} carriers across ${snapshot.allianceName || 'Global'} dataset`
+    : `${snapshot.peers.length} carriers in ${snapshot.allianceName || 'global'} sample`
+
+  return {
+    summary: snapshot.summary,
+    peerSummary: {
+      label: allianceLabel,
+      sampleSize: snapshot.peers.length,
+      context: snapshot.context,
+      percentile: snapshot.percentile,
+      spanYears: snapshot.spanYears,
+      minFounded: snapshot.minFounded,
+      maxFounded: snapshot.maxFounded,
+      closestPeers: snapshot.closestPeers,
+    },
+  }
+}
+
+function summarizeAirlinePeers({ code, allianceLabel }) {
+  const peers = Object.entries(AIRLINE_FACTS)
+    .map(([airlineCode, facts]) => {
+      const foundYear = toNumericYear(facts?.founded)
+      return {
+        code: cleanText(airlineCode),
+        founded: foundYear,
+        alliance: normalizeAlliance(facts?.alliance),
+      }
+    })
+    .filter(item => item.code && Number.isFinite(item.founded))
+
+  const filteredPeers = peers.filter(item =>
+    allianceLabel && allianceLabel !== 'independent'
+      ? item.alliance === allianceLabel
+      : true
+  )
+  const normalizedPeers = filteredPeers.length > 0 ? filteredPeers : peers
+  if (normalizedPeers.length === 0) return null
+
+  const sorted = [...normalizedPeers].sort((a, b) => a.founded - b.founded)
+  const activeCode = cleanText(code)
+  const current = sorted.find(item => item.code === activeCode)
+  const minFounded = sorted[0]?.founded
+  const maxFounded = sorted[sorted.length - 1]?.founded
+  const spanYears = Number.isFinite(minFounded) && Number.isFinite(maxFounded)
+    ? maxFounded - minFounded
+    : null
+
+  if (!current) {
+    return {
+      summary: `No direct registry match for ${code || 'this carrier'}; using peer age spread fallback.`,
+      peers: sorted,
+      allianceName: allianceLabel && allianceLabel !== 'independent' ? allianceLabel : 'global',
+      context: `Closest baseline set includes ${sorted.length} carriers with known foundation years.`,
+      percentile: null,
+      spanYears,
+      minFounded,
+      maxFounded,
+      closestPeers: sorted.slice(0, 3),
+    }
+  }
+
+  const olderPeers = sorted.filter(item => item.founded < current.founded)
+  const olderCount = olderPeers.length
+  const percent = sorted.length > 1
+    ? Math.round((olderCount / (sorted.length - 1)) * 100)
+    : 0
+
+  return {
+    summary: `${current.founded} founding year positions this carrier above ${percent}% of peers by age in the ${allianceLabel && allianceLabel !== 'independent' ? allianceLabel : 'global'} cohort.`,
+    peers: sorted,
+    allianceName: allianceLabel && allianceLabel !== 'independent' ? allianceLabel : 'global',
+    context: `Compared to ${sorted.length} peer carriers with founding years, this carrier is older than ${olderCount}.`,
+    percentile: percent,
+    spanYears,
+    minFounded,
+    maxFounded,
+    closestPeers: closestYearPeers(sorted, current.code),
+  }
+}
+
+function normalizeAlliance(value) {
+  const label = cleanText(value)?.toLowerCase()
+  return label || 'independent'
+}
+
+function closestYearPeers(sortedPeers, code) {
+  const current = sortedPeers.find(peer => peer.code === code)
+  if (!current) return sortedPeers.slice(0, 3)
+
+  return [...sortedPeers]
+    .filter(peer => peer.code !== code)
+    .map(peer => ({
+      ...peer,
+      delta: Math.abs(peer.founded - current.founded),
+    }))
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 3)
+    .map(({ delta, ...peer }) => peer)
+}
+
+function buildAircraftContext(facts, typeCode, model) {
+  if (!facts) return {
+    sizeLabel: model ? `Profile for ${model}` : `Type ${typeCode || 'unknown'} inferred` ,
+  }
+
+  const seatRange = parseSeatRange(facts.seats)
+  const capacityPercentile = seatRange ? valuePercentile((seatRange[0] + seatRange[1]) / 2, aircraftMetricSamples('seats')) : null
+  const rangePercentile = toNumberLike(facts.rangeNm) ? valuePercentile(facts.rangeNm, aircraftMetricSamples('rangeNm')) : null
+  const lengthPercentile = toNumberLike(facts.lengthFt) ? valuePercentile(facts.lengthFt, aircraftMetricSamples('lengthFt')) : null
+  const wingspanPercentile = toNumberLike(facts.wingspanFt) ? valuePercentile(facts.wingspanFt, aircraftMetricSamples('wingspanFt')) : null
+
+  return {
+    sizeLabel: `Baseline family context: ${facts.family || 'airframe class'}, role ${facts.role || 'unknown'} from type records.`,
+    capacityPercentile,
+    rangePercentile,
+    lengthPercentile,
+    wingspanPercentile,
+  }
+}
+
+function aircraftMetricSamples(metricKey) {
+  const values = []
+  Object.values(AIRCRAFT_FACTS).forEach((fact) => {
+    const value = toNumberLike(fact[metricKey])
+    if (Number.isFinite(value)) values.push(value)
+  })
+  return values
+}
+
+function parseSeatRange(value) {
+  const clean = cleanText(value)
+  if (!clean) return null
+  const parts = clean.match(/\d+/g)
+  if (!parts || parts.length === 0) return null
+  const numbers = parts.map(v => Number(v)).filter(Number.isFinite)
+  if (!numbers.length) return null
+  if (numbers.length === 1) return [numbers[0], numbers[0]]
+  return [Math.min(numbers[0], numbers[1]), Math.max(numbers[0], numbers[1])]
+}
+
+function toNumberLike(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function valuePercentile(value, samples) {
+  if (!Number.isFinite(value) || samples.length < 2) return null
+  const sorted = [...samples].sort((a, b) => a - b)
+  const maxIndex = sorted.length - 1
+  const rank = sorted.reduce((acc, sample) => (sample <= value ? acc + 1 : acc), 0) - 1
+  return Math.round((rank / maxIndex) * 100)
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function SectionLabel({ children }) {
   return (
     <div style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600, letterSpacing: 0.2, marginBottom: 10 }}>
       {children}
+    </div>
+  )
+}
+
+function SectionLead({ children }) {
+  return (
+    <div style={{
+      marginBottom: 10,
+      fontSize: 11,
+      color: 'var(--text-dim)',
+      lineHeight: 1.45,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function ContextMetric({ label, value, context }) {
+  return (
+    <div style={{
+      background: 'var(--panel-soft)',
+      border: '1px solid var(--panel-border)',
+      borderRadius: 6,
+      padding: '10px 12px',
+      marginBottom: 8,
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4, letterSpacing: 0.2, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 16, color: 'var(--heading)', fontWeight: 600, lineHeight: 1.25 }}>{value}</div>
+      {context && <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-dim)' }}>{context}</div>}
+    </div>
+  )
+}
+
+function MetricGrid({ children }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+      gap: 10,
+      marginTop: 4,
+      marginBottom: 10,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function MetricWithPercent({ label, value, context, percentile, barLabel, reverseScale = false }) {
+  const parsed = value
+  const hasBar = Number.isFinite(percentile)
+  const normalized = hasBar
+    ? clamp01(reverseScale ? 1 - (percentile / 100) : percentile / 100)
+    : null
+  return (
+    <div style={{
+      background: 'var(--panel-soft)',
+      border: '1px solid var(--panel-border)',
+      borderRadius: 6,
+      padding: '8px 10px',
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 5 }}>{label}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>{parsed}</span>
+        {hasBar && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{percentile}% {barLabel || 'position'}</span>}
+      </div>
+      {hasBar && (
+        <div style={{ marginTop: 6, height: 6, borderRadius: 5, background: 'rgba(255,255,255,0.08)' }}>
+          <div style={{ height: '100%', borderRadius: 5, width: `${Math.round(normalized * 100)}%`, background: 'var(--cyan)', transition: 'width 0.45s ease' }} />
+        </div>
+      )}
+      <div style={{ marginTop: hasBar ? 5 : 2, fontSize: 10, color: 'var(--text-dim)' }}>{context}</div>
     </div>
   )
 }
@@ -658,11 +1047,18 @@ function BigStat({ label, value, unit, sub, color, bar }) {
   )
 }
 
-function DossierSection({ title, children }) {
+function DossierSection({ title, children, style }) {
   const valid = Array.isArray(children) ? children.filter(Boolean) : children
   if (!valid || (Array.isArray(valid) && valid.length === 0)) return null
   return (
-    <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--panel-line)' }}>
+    <div
+      className="detail-section-shell"
+      style={{
+        ...style,
+        padding: '14px 22px',
+        borderBottom: '1px solid var(--panel-line)',
+      }}
+    >
       <SectionLabel>{title}</SectionLabel>
       <div>{children}</div>
     </div>

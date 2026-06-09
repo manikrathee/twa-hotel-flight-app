@@ -10,6 +10,11 @@ function normalizeFlightId(value) {
   return String(value || '').trim().toLowerCase()
 }
 
+function toFiniteNumber(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function sortFlightsByDistance(flights) {
   return [...flights].sort((a, b) => (a.distKm || Infinity) - (b.distKm || Infinity))
 }
@@ -175,14 +180,6 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
           NEARBY TRAFFIC
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            fontSize: 13, color: 'var(--cyan)',
-            background: 'rgba(var(--cyan-alt-rgb), 0.14)', padding: '2px 9px', borderRadius: 999,
-            border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
-            fontWeight: 600,
-          }}>
-            {totalShownLabel} shown
-          </div>
           <button
             type="button"
             onClick={onToggleCollapse}
@@ -266,9 +263,15 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
 const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   const airline = getAirlineName(flight.callsign)
   const fn = parseFlightNumber(flight.callsign) || flight.icao24
-  const alt = flight.baro_altitude ? `${Math.round(metersToFeet(flight.baro_altitude) / 100)}` : '—'
-  const spd = flight.velocity ? msToKnots(flight.velocity) : '—'
-  const vr = flight.vertical_rate || 0
+  const baroAltitude = toFiniteNumber(flight.baro_altitude)
+  const geoAltitude = toFiniteNumber(flight.geo_altitude)
+  const resolvedAltitude = baroAltitude ?? geoAltitude
+  const alt = resolvedAltitude == null
+    ? '—'
+    : `${Math.round(Math.max(0, metersToFeet(resolvedAltitude)) / 100)}`
+  const spdValue = toFiniteNumber(flight.velocity)
+  const spd = spdValue == null ? '—' : msToKnots(Math.max(0, spdValue))
+  const vr = toFiniteNumber(flight.vertical_rate) ?? 0
   const vrIndicator = vr > 1 ? '↑' : vr < -1 ? '↓' : '—'
   const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? 'var(--red-alt)' : 'var(--text-dim)'
   const distMi = Math.round(flight.distKm * 0.621)
@@ -321,7 +324,7 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
       </div>
       <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>
         <span>{alt}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-dim)', marginLeft: 2 }}>FL</span>
+        {alt !== '—' && <span style={{ fontSize: 12, color: 'var(--text-dim)', marginLeft: 2 }}>FL</span>}
       </div>
       <div style={{ fontSize: 13 }}>
         <span style={{ color: vrColor }}>{vrIndicator}</span>
@@ -337,6 +340,7 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   prev.flight.longitude === next.flight.longitude &&
   prev.flight.distKm === next.flight.distKm &&
   prev.flight.baro_altitude === next.flight.baro_altitude &&
+  prev.flight.geo_altitude === next.flight.geo_altitude &&
   prev.flight.velocity === next.flight.velocity &&
   prev.flight.vertical_rate === next.flight.vertical_rate &&
   prev.onSelect === next.onSelect
