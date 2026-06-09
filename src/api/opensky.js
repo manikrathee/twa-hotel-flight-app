@@ -5,8 +5,39 @@ import { JFK_AIRSPACE_BBOX } from '../config/airspace'
 const DEMO_FLIGHTS = []
 
 const BASE = '/api/opensky'
+const CACHED_FLIGHT_FILE_TTL_MS = 60 * 1000
+let cachedFlightFile = null
+let cachedFlightFilePromise = null
+let flightCacheAtMs = 0
 
-const BBOX = JFK_AIRSPACE_BBOX
+const FALLBACK_BBOX = JFK_AIRSPACE_BBOX
+
+function normalizeBBox(bounds = FALLBACK_BBOX) {
+  if (!bounds) return FALLBACK_BBOX
+  const {
+    lamin,
+    lomin,
+    lamax,
+    lomax,
+  } = bounds
+
+  const normalized = {
+    lamin: Number(lamin),
+    lomin: Number(lomin),
+    lamax: Number(lamax),
+    lomax: Number(lomax),
+  }
+
+  if (Object.values(normalized).some(value => !Number.isFinite(value))) {
+    return FALLBACK_BBOX
+  }
+
+  return normalized
+}
+
+function isFlightFileFresh() {
+  return cachedFlightFile && (Date.now() - flightCacheAtMs) <= CACHED_FLIGHT_FILE_TTL_MS
+}
 
 function parseStates(states) {
   if (!Array.isArray(states)) return []
@@ -45,8 +76,13 @@ async function apiFetch(url, options = {}, retry = true) {
   return res
 }
 
-export async function fetchFlights() {
-  const { lamin, lomin, lamax, lomax } = BBOX
+export async function fetchFlights(bounds = FALLBACK_BBOX) {
+  const {
+    lamin,
+    lomin,
+    lamax,
+    lomax,
+  } = normalizeBBox(bounds)
   const res = await apiFetch(
     `${BASE}/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`,
     { signal: AbortSignal.timeout(12000) }
@@ -67,31 +103,61 @@ export async function fetchFlights() {
 // The file is written by scripts/fetch-flights.js and served by Vite as a static asset.
 export async function fetchCachedFlights() {
   try {
-    const res = await fetch('/flights-cache.json', {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(4000),
-    })
-    if (!res.ok) {
-      return {
+    if (isFlightFileFresh()) return cachedFlightFile
+
+    if (cachedFlightFilePromise) return cachedFlightFilePromise
+
+    const request = (async () => {
+      const res = await fetch('/flights-cache.json', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(4000),
+      })
+      if (!res.ok) {
+        cachedFlightFile = {
+          flights: DEMO_FLIGHTS.map(f => ({ ...f })),
+          cachedAt: new Date(),
+          cacheSource: 'mock',
+        }
+        flightCacheAtMs = Date.now()
+        return cachedFlightFile
+      }
+
+      const data = await res.json()
+      if (!data?.flights?.length) {
+        cachedFlightFile = null
+        flightCacheAtMs = Date.now()
+        return null
+      }
+
+      cachedFlightFile = {
+        flights: data.flights,
+        cachedAt: new Date(data.fetchedAt),
+        cacheSource: data.source, // 'live' | 'mock'
+      }
+      flightCacheAtMs = Date.now()
+      return cachedFlightFile
+    })()
+
+    cachedFlightFilePromise = request
+    const out = await request.finally(() => { cachedFlightFilePromise = null })
+    return out
+  } catch {
+    if (!cachedFlightFile) {
+      cachedFlightFile = {
         flights: DEMO_FLIGHTS.map(f => ({ ...f })),
         cachedAt: new Date(),
         cacheSource: 'mock',
       }
+      flightCacheAtMs = Date.now()
     }
-    const data = await res.json()
-    if (!data?.flights?.length) return null
-    return {
-      flights: data.flights,
-      cachedAt: new Date(data.fetchedAt),
-      cacheSource: data.source, // 'live' | 'mock'
-    }
-  } catch {
-    return {
-      flights: DEMO_FLIGHTS.map(f => ({ ...f })),
-      cachedAt: new Date(),
-      cacheSource: 'mock',
-    }
+    return cachedFlightFile
   }
+}
+
+export async function invalidateCachedFlights() {
+  cachedFlightFile = null
+  flightCacheAtMs = 0
+  cachedFlightFilePromise = null
 }
 
 export async function fetchTrack(icao24, signal) {

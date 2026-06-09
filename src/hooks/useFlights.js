@@ -12,7 +12,12 @@ import { distanceKm } from '../utils/geo'
 import { buildPositionedSamples } from '../utils/flightSamples'
 import { flightCache } from '../cache/flightCache'
 import { recordFlightSamples } from '../db/flightHistoryDb'
-import { JFK, TWA_HOTEL, TWA_VISIBLE_RADIUS_MI, routeTouchesJfk } from '../config/airspace'
+import {
+  JFK,
+  bboxAround,
+  MAP_RADIUS_MI,
+  routeTouchesJfk,
+} from '../config/airspace'
 
 const BASE_POLL_MS          = 15_000
 const SELECTED_POLL_AUTH_MS = 2_500
@@ -20,8 +25,12 @@ const SELECTED_POLL_ANON_MS = 5_000
 const STALE_SHOW_MS         = 90_000  // show stale badge after 90s without a fresh update
 const HAS_OPENSKY_AUTH      = Boolean(import.meta.env.VITE_OPENSKY_CLIENT_ID)
 const ROUTE_TTL_MS          = 20 * 60 * 1000
-const TWA_VISIBLE_RADIUS_KM = TWA_VISIBLE_RADIUS_MI / 0.621371
-const EXTRAPOLATION_TICK_MS  = 1_000
+const JURISDICTION_ROUTE_FILTER_RADIUS_KM = 130
+const SEARCH_RADIUS_MIN_MI = 6
+const SEARCH_RADIUS_MAX_MI = 140
+const SEARCH_RADIUS_DEFAULT_MI = MAP_RADIUS_MI
+const SEARCH_RADIUS_DEFAULT_KM = SEARCH_RADIUS_DEFAULT_MI / 0.621371
+const EXTRAPOLATION_TICK_MS  = 250
 const EXTRAPOLATED_AGE_LIMIT = 60
 const COLLISION_DISTANCE_KM = 0.08
 const COLLISION_ALT_CEILING_M = 80
@@ -184,6 +193,29 @@ function evictRouteCache() {
   }
 }
 
+function normalizeSearchCenter(center) {
+  const lat = Number(center?.lat)
+  const lon = Number(center?.lon)
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+
+  return {
+    lat,
+    lon,
+  }
+}
+
+function normalizeSearchRadiusMi(value) {
+  const radius = Number(value)
+  if (!Number.isFinite(radius)) return SEARCH_RADIUS_DEFAULT_MI
+  return Math.max(SEARCH_RADIUS_MIN_MI, Math.min(SEARCH_RADIUS_MAX_MI, radius))
+}
+
+function shouldApplyJfkRouteFilter(center = JFK) {
+  const normalized = normalizeSearchCenter(center)
+  if (!normalized) return false
+  return distanceKm(JFK.lat, JFK.lon, normalized.lat, normalized.lon) <= JURISDICTION_ROUTE_FILTER_RADIUS_KM
+}
+
 async function resolveRoute(callsign) {
   const key = normalizeCallsign(callsign)
   if (!key) return null
@@ -212,18 +244,23 @@ async function resolveRoute(callsign) {
 }
 
 async function enrichFlights(raw, options = {}) {
-  const { skipHotelFilter = false, skipRouteFilter = false } = options
-  const { constrained } = options
+  const {
+    skipHotelFilter = false,
+    skipRouteFilter = false,
+    constrained = false,
+    spatialCenter = JFK,
+    spatialRadiusKm = SEARCH_RADIUS_DEFAULT_KM,
+    routeFilterEnabled = false,
+  } = options
 
+  const center = normalizeSearchCenter(spatialCenter) || JFK
   const candidates = buildPositionedSamples(raw)
-    .map(f => {
-      const distKm = distanceKm(JFK.lat, JFK.lon, f.latitude, f.longitude)
-      if (skipHotelFilter) return { ...f, distKm }
+    .map(flight => {
+      const distKm = distanceKm(center.lat, center.lon, flight.latitude, flight.longitude)
+      if (skipHotelFilter) return { ...flight, distKm }
+      if (Number.isFinite(spatialRadiusKm) && distKm > spatialRadiusKm) return null
 
-      const distToTwaKm = distanceKm(TWA_HOTEL.lat, TWA_HOTEL.lon, f.latitude, f.longitude)
-      if (distToTwaKm > TWA_VISIBLE_RADIUS_KM) return null
-
-      return { ...f, distKm }
+      return { ...flight, distKm }
     })
     .filter(Boolean)
     .sort((a, b) => a.distKm - b.distKm)
@@ -247,7 +284,7 @@ async function enrichFlights(raw, options = {}) {
 
   const ranked = routeWindow
     .filter(f => {
-      if (skipRouteFilter) return true
+      if (skipRouteFilter || !routeFilterEnabled) return true
       const callsign = normalizeCallsign(f.callsign)
       if (!callsign) return true
       const route = routeByCallsign.get(callsign)
@@ -270,10 +307,27 @@ async function enrichFlights(raw, options = {}) {
   return dedupeAndValidateFlights(prioritized)
 }
 
-export default function useFlights(selectedIcao = null) {
+export default function useFlights(selectedIcao = null, options = {}) {
+  const {
+    searchCenter,
+    searchRadiusMi,
+    applyJfkRouteFilter = false,
+  } = options
+
+  const center = normalizeSearchCenter(searchCenter) || JFK
+  const radiusMi = normalizeSearchRadiusMi(searchRadiusMi)
+  const radiusKm = radiusMi / 0.621371
+  const spatialBbox = bboxAround(center, radiusMi)
+  const routeFilterEnabled = applyJfkRouteFilter && shouldApplyJfkRouteFilter(center)
+
   const selectedPollMs = HAS_OPENSKY_AUTH ? SELECTED_POLL_AUTH_MS : SELECTED_POLL_ANON_MS
   const pollMs = selectedIcao ? selectedPollMs : BASE_POLL_MS
   const fallbackAvailable = isFallbackFeedEnabled()
+  const enrichOptions = {
+    spatialCenter: center,
+    spatialRadiusKm: radiusKm,
+    routeFilterEnabled,
+  }
 
   const [flights, setFlights]               = useState([])
   const [loading, setLoading]               = useState(true)
@@ -282,7 +336,7 @@ export default function useFlights(selectedIcao = null) {
   const [rateLimitStatus, setRateLimitStatus] = useState('ok')   // 'ok' | 'blocked'
   const [backoffUntil, setBackoffUntil]     = useState(null)
   const [isStale, setIsStale]               = useState(false)
-  const [dataSource, setDataSource]         = useState(null)     // null | { type: 'live' } | { type: 'cache', cachedAt } | { type: 'mock', cachedAt }
+  const [dataSource, setDataSource]         = useState(null)     // null | { type: 'live' } | { type: 'cache', cachedAt, cacheSource?: 'live'|'mock' }
   const [isConstrained, setIsConstrained]   = useState(false)
 
   const timerRef   = useRef(null)
@@ -328,7 +382,7 @@ export default function useFlights(selectedIcao = null) {
 
       if (!fallbackAvailable || shouldProbePrimary()) {
         try {
-          raw = await fetchFlights()
+          raw = await fetchFlights(spatialBbox)
         } catch (error) {
           fetchError = error
           if (shouldProbePrimary()) {
@@ -344,7 +398,7 @@ export default function useFlights(selectedIcao = null) {
 
       if (!raw && fallbackAvailable) {
         try {
-          raw = await fetchFallbackFlights()
+          raw = await fetchFallbackFlights(spatialBbox)
           usedFallback = true
         } catch (fallbackError) {
           if (!fetchError) fetchError = fallbackError
@@ -355,25 +409,37 @@ export default function useFlights(selectedIcao = null) {
         throw fetchError || new Error('No live flight payload available')
       }
 
-  if (usedFallback) {
-    fallbackProbeAtRef.current = Date.now() + getFallbackFeedPrimaryRetryMs()
-  } else {
-    fallbackProbeAtRef.current = 0
-  }
+      if (usedFallback) {
+        fallbackProbeAtRef.current = Date.now() + getFallbackFeedPrimaryRetryMs()
+      } else {
+        fallbackProbeAtRef.current = 0
+      }
 
-  const positionedSamples = buildPositionedSamples(raw)
-  if (positionedSamples.length) {
-    await recordFlightSamples(positionedSamples, Date.now())
-  }
+      const positionedSamples = buildPositionedSamples(raw)
+      if (positionedSamples.length) {
+        await recordFlightSamples(positionedSamples, Date.now())
+      }
 
       const shouldConstrain = constrainedByConnection || raw.length > HIGH_DENSITY_FLIGHT_THRESHOLD
       setIsConstrained(shouldConstrain)
-      const filtered = await enrichFlights(raw, { constrained: shouldConstrain })
+      const filtered = await enrichFlights(raw, {
+        constrained: shouldConstrain,
+        ...enrichOptions,
+      })
       const routeOnlyFallback = filtered.length === 0 && positionedSamples.length > 0
-        ? await enrichFlights(raw, { constrained: false, skipRouteFilter: true })
+        ? await enrichFlights(raw, {
+          constrained: false,
+          ...enrichOptions,
+          skipRouteFilter: true,
+        })
         : null
       const routeAndHotelFallback = filtered.length === 0 && positionedSamples.length > 0
-        ? await enrichFlights(raw, { constrained: false, skipHotelFilter: true, skipRouteFilter: true })
+        ? await enrichFlights(raw, {
+          constrained: false,
+          ...enrichOptions,
+          skipHotelFilter: true,
+          skipRouteFilter: true,
+        })
         : null
       const finalFiltered = routeOnlyFallback && routeOnlyFallback.length > 0
         ? routeOnlyFallback
@@ -389,9 +455,18 @@ export default function useFlights(selectedIcao = null) {
           if (cachedSamples.length > 0) {
             await recordFlightSamples(cachedSamples, cached.cachedAt?.getTime() || Date.now())
           }
-          let fallback = cached?.flights ? await enrichFlights(cached.flights, { constrained: true }) : []
+          let fallback = cached?.flights
+            ? await enrichFlights(cached.flights, {
+              constrained: true,
+              ...enrichOptions,
+            })
+            : []
           if (fallback.length === 0 && cachedSamples.length > 0) {
-            const fallbackFiltered = await enrichFlights(cached.flights, { constrained: false, skipRouteFilter: true })
+            const fallbackFiltered = await enrichFlights(cached.flights, {
+              constrained: false,
+              ...enrichOptions,
+              skipRouteFilter: true,
+            })
             if (fallbackFiltered.length > 0) {
               fallback = fallbackFiltered
             }
@@ -399,6 +474,7 @@ export default function useFlights(selectedIcao = null) {
           if (fallback.length === 0 && cachedSamples.length > 0) {
             const noRouteNoHotelFiltered = await enrichFlights(cached.flights, {
               constrained: false,
+              ...enrichOptions,
               skipHotelFilter: true,
               skipRouteFilter: true,
             })
@@ -415,18 +491,21 @@ export default function useFlights(selectedIcao = null) {
             flightsRef.current = fallback
           }
           setDataSource({
-            type: cached?.cacheSource === 'mock' ? 'mock' : 'cache',
+            type: 'cache',
             cachedAt: cached?.cachedAt,
             cacheSource: cached?.cacheSource,
           })
-          setError(cached?.cacheSource === 'mock' ? 'No live JFK traffic received - showing simulation' : null)
+          setError(cached?.cacheSource === 'mock'
+            ? 'No live traffic in this area - showing simulation'
+            : null
+          )
           setRateLimitStatus('ok')
           setBackoffUntil(null)
           setIsConstrained(true)
           scheduleNext(pollMs)
           return
         } catch {
-          setError('No live JFK traffic received')
+          setError('No live traffic received')
           scheduleNext(pollMs)
           return
         }
@@ -475,15 +554,23 @@ export default function useFlights(selectedIcao = null) {
           const cachedSamples = buildPositionedSamples(cached.flights)
           await recordFlightSamples(cachedSamples, cached.cachedAt?.getTime() || Date.now())
 
-          let filtered = await enrichFlights(cached.flights, { constrained: true })
+          let filtered = await enrichFlights(cached.flights, {
+            constrained: true,
+            ...enrichOptions,
+          })
           if (filtered.length === 0 && cachedSamples.length > 0) {
-            const fallbackFiltered = await enrichFlights(cached.flights, { constrained: false, skipRouteFilter: true })
+            const fallbackFiltered = await enrichFlights(cached.flights, {
+              constrained: false,
+              ...enrichOptions,
+              skipRouteFilter: true,
+            })
             if (fallbackFiltered.length > 0) {
               filtered = fallbackFiltered
             }
           }
           if (filtered.length === 0 && cachedSamples.length > 0) {
             const noRouteNoHotelFiltered = await enrichFlights(cached.flights, {
+              ...enrichOptions,
               constrained: false,
               skipHotelFilter: true,
               skipRouteFilter: true,
@@ -501,7 +588,7 @@ export default function useFlights(selectedIcao = null) {
             flightsRef.current = filtered
           }
           setDataSource({
-            type: cached.cacheSource === 'mock' ? 'mock' : 'cache',
+            type: 'cache',
             cachedAt: cached.cachedAt,
             cacheSource: cached.cacheSource,
           })
@@ -516,11 +603,31 @@ export default function useFlights(selectedIcao = null) {
       loadInFlightRef.current = false
       if (mountedRef.current) setLoading(false)
     }
-  }, [pollMs, scheduleNext, fallbackAvailable, shouldProbePrimary])
+  }, [
+    center.lat,
+    center.lon,
+    pollMs,
+    routeFilterEnabled,
+    radiusKm,
+    scheduleNext,
+    fallbackAvailable,
+    shouldProbePrimary,
+    spatialBbox.lamin,
+    spatialBbox.lamax,
+    spatialBbox.lomin,
+    spatialBbox.lomax,
+    selectedIcao,
+  ])
 
   useEffect(() => {
     loadRef.current = load
   }, [load])
+
+  useEffect(() => {
+    clearTimeout(timerRef.current)
+    if (!mountedRef.current) return
+    loadRef.current?.()
+  }, [spatialBbox.lamin, spatialBbox.lomin, spatialBbox.lamax, spatialBbox.lomax])
 
   useEffect(() => {
     const initialLoadId = setTimeout(() => { loadRef.current?.() }, 0)
@@ -569,11 +676,8 @@ export default function useFlights(selectedIcao = null) {
       const currentSelected = currentFlights[selectedIndex]
       if (sameFlightSnapshot(currentSelected, selectedExtrapolated)) return
 
-      const nextFlights = currentFlights.map((flight) => (
-        flight.icao24 === selectedIcao
-          ? selectedExtrapolated
-          : flight
-      ))
+      const nextFlights = currentFlights.slice()
+      nextFlights[selectedIndex] = selectedExtrapolated
 
       setFlights(nextFlights)
       flightsRef.current = nextFlights

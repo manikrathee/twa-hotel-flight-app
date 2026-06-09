@@ -4,6 +4,57 @@ import { convertSamplesToTrack, getWindowSamples, makeMapFlightFromSample } from
 const REFRESH_INTERVAL_MS = 12_000
 const TICK_INTERVAL_MS = 220
 const STALE_MS = 95_000
+const TRACK_GAP_MAX_MS = 75_000
+const TRACK_GAP_STEP_MS = 4_000
+const PATH_RECENT_WINDOW_MS = 90 * 60 * 1000
+
+function normalizeFlightId(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function densifyTrackPoints(points, {
+  maxGapMs = TRACK_GAP_MAX_MS,
+  stepMs = TRACK_GAP_STEP_MS,
+} = {}) {
+  if (!Array.isArray(points) || points.length < 2) return []
+
+  const out = []
+  const stepCapMs = Math.max(500, stepMs)
+
+  for (let i = 0; i < points.length; i += 1) {
+    const current = points[i]
+    if (!current) continue
+
+    const currLon = Number(current.longitude)
+    const currLat = Number(current.latitude)
+    if (!Number.isFinite(currLon) || !Number.isFinite(currLat)) continue
+    out.push([currLon, currLat])
+
+    const next = points[i + 1]
+    if (!next) continue
+
+    const nextLon = Number(next.longitude)
+    const nextLat = Number(next.latitude)
+    const nextTs = Number(next.ts)
+    if (!Number.isFinite(nextLon) || !Number.isFinite(nextLat) || !Number.isFinite(nextTs) || !Number.isFinite(current.ts)) continue
+
+    const gapMs = nextTs - Number(current.ts)
+    if (gapMs <= stepCapMs || gapMs > maxGapMs) continue
+
+    const steps = Math.floor(gapMs / stepCapMs)
+    if (steps <= 1) continue
+
+    const stepLat = (nextLat - currLat) / steps
+    const stepLon = (nextLon - currLon) / steps
+    for (let step = 1; step < steps; step += 1) {
+      const ratio = step / steps
+      if (ratio <= 0 || ratio >= 1) continue
+      out.push([currLon + stepLon * step, currLat + stepLat * step])
+    }
+  }
+
+  return out
+}
 
 function buildFlightsByIcao(samples) {
   const grouped = new Map()
@@ -45,42 +96,75 @@ function latestBeforeOrAt(samples, cursorMs) {
   return best
 }
 
-function pathLinesFromMap(flightPaths, cursorMs) {
-  const features = []
+function pathLinesFromMap(flightPaths, cursorMs, {
+  maxFlights,
+  selectedIcao,
+  recentWindowMs,
+} = {}) {
+  const candidates = []
+  const normalizedSelectedIcao = normalizeFlightId(selectedIcao)
+  const hasWindow = Number.isFinite(recentWindowMs) && recentWindowMs > 0
+  const cursorTimeMs = Number(cursorMs)
+  const windowStartMs = hasWindow ? cursorTimeMs - recentWindowMs : Number.NEGATIVE_INFINITY
+  if (!Number.isFinite(cursorTimeMs)) return { type: 'FeatureCollection', features: [] }
 
   for (const [icao24, points] of flightPaths) {
     if (!Array.isArray(points)) continue
 
-    const pointsToUse = points.filter(point => Number.isFinite(point.ts) && point.ts <= cursorMs)
+    const pointsToUse = points.filter(point => Number.isFinite(point?.ts)
+      && point.ts <= cursorTimeMs
+      && point.ts >= windowStartMs)
     if (pointsToUse.length < 2) continue
     const last = pointsToUse[pointsToUse.length - 1]
-    const coords = pointsToUse
-      .map(point => {
-        if (!Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) return null
-        return [point.longitude, point.latitude]
-      })
-      .filter(Boolean)
+    const coords = densifyTrackPoints(pointsToUse)
 
     if (coords.length < 2) continue
 
-    features.push({
-      type: 'Feature',
-      properties: {
-        icao24,
-        callsign: last.callsign || icao24,
-        pointCount: pointsToUse.length,
-        sampleKind: last.sampleKind,
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates: coords,
+    candidates.push({
+      lastTs: last.ts,
+      feature: {
+        type: 'Feature',
+        properties: {
+          icao24,
+          callsign: last.callsign || icao24,
+          pointCount: pointsToUse.length,
+          sampleKind: last.sampleKind,
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: coords,
+        },
       },
     })
   }
 
+  const sorted = candidates.sort((a, b) => b.lastTs - a.lastTs)
+
+  const selectedFeature = normalizedSelectedIcao
+    ? sorted.find(item => normalizeFlightId(item.feature?.properties?.icao24) === normalizedSelectedIcao)
+    : null
+
+  const topFlights = Number.isFinite(maxFlights) && maxFlights > 0
+    ? sorted.slice(0, maxFlights)
+    : sorted
+
+  if (!normalizedSelectedIcao || !selectedFeature) {
+    return {
+      type: 'FeatureCollection',
+      features: topFlights.map(item => item.feature),
+    }
+  }
+
+  const reordered = [
+    selectedFeature,
+    ...topFlights.filter(item => normalizeFlightId(item.feature?.properties?.icao24) !== normalizedSelectedIcao),
+  ]
+
   return {
     type: 'FeatureCollection',
-    features,
+    features: Number.isFinite(maxFlights) && maxFlights > 0
+      ? reordered.slice(0, maxFlights)
+      : reordered,
   }
 }
 
@@ -140,6 +224,7 @@ export default function useFlightHistory({
   isPlaying,
   speedMultiplier = 2,
   refreshKey,
+  selectedIcao = null,
 }) {
   const [samples, setSamples] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -312,8 +397,11 @@ export default function useFlightHistory({
   const pathFeatures = useMemo(() => {
     if (!enabled || !range) return { type: 'FeatureCollection', features: [] }
 
-    return pathLinesFromMap(groupedByIcao, pathLimitMs)
-  }, [enabled, range, groupedByIcao, pathLimitMs])
+    return pathLinesFromMap(groupedByIcao, pathLimitMs, {
+      selectedIcao,
+      recentWindowMs: PATH_RECENT_WINDOW_MS,
+    })
+  }, [enabled, range, groupedByIcao, pathLimitMs, selectedIcao])
 
   const congestion = useMemo(() => {
     if (!enabled || !range) return { type: 'FeatureCollection', features: [] }

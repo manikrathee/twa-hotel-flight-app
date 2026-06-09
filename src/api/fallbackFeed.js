@@ -8,7 +8,7 @@ const FEED_CONFIG = {
   fallbackToPrimaryIntervalMs: Number(import.meta.env.VITE_FALLBACK_PRIMARY_RETRY_MS || 45_000),
 }
 
-const BBOX = JFK_AIRSPACE_BBOX
+const FALLBACK_BBOX = JFK_AIRSPACE_BBOX
 const MIN_TIMEOUT_MS = 2_000
 const MAX_TIMEOUT_MS = 30_000
 const MAX_ALTITUDE_M = 1_200_000
@@ -229,17 +229,46 @@ function normalizeFlightRecordFromAny(record) {
   return parseFr24ObjectRecord(record)
 }
 
-function applyBBoxQuery(url, provider) {
+function normalizeBounds(bounds = FALLBACK_BBOX) {
+  if (!bounds) return FALLBACK_BBOX
+  const {
+    lamin,
+    lomin,
+    lamax,
+    lomax,
+  } = bounds
+
+  const normalized = {
+    lamin: Number(lamin),
+    lomin: Number(lomin),
+    lamax: Number(lamax),
+    lomax: Number(lomax),
+  }
+
+  if (Object.values(normalized).some(value => !Number.isFinite(value))) {
+    return FALLBACK_BBOX
+  }
+
+  return normalized
+}
+
+function applyBBoxQuery(url, provider, bounds = FALLBACK_BBOX) {
   const target = new URL(url, typeof window === 'undefined' ? 'http://localhost' : window.location.origin)
+  const {
+    lamin,
+    lomin,
+    lamax,
+    lomax,
+  } = normalizeBounds(bounds)
 
   const hasBboxQuery = target.searchParams.has('lamin') || target.searchParams.has('lomax') || target.searchParams.has('bounds')
   if (hasBboxQuery) return target
 
   if (provider === 'opensky') {
-    target.searchParams.set('lamin', String(BBOX.lamin))
-    target.searchParams.set('lomin', String(BBOX.lomin))
-    target.searchParams.set('lamax', String(BBOX.lamax))
-    target.searchParams.set('lomax', String(BBOX.lomax))
+    target.searchParams.set('lamin', String(lamin))
+    target.searchParams.set('lomin', String(lomin))
+    target.searchParams.set('lamax', String(lamax))
+    target.searchParams.set('lomax', String(lomax))
     return target
   }
 
@@ -273,11 +302,11 @@ export function getFallbackFeedPrimaryRetryMs() {
   return Math.max(1_000, FEED_CONFIG.fallbackToPrimaryIntervalMs)
 }
 
-function buildFallbackUrl() {
+function buildFallbackUrl(bounds = FALLBACK_BBOX) {
   const provider = FEED_CONFIG.provider
   const url = FEED_CONFIG.url
   if (!url) throw new Error('Fallback feed is not configured')
-  return applyBBoxQuery(url, provider).toString()
+  return applyBBoxQuery(url, provider, bounds).toString()
 }
 
 function parseFallbackResponse(raw) {
@@ -288,7 +317,7 @@ function parseFallbackResponse(raw) {
   return parseGenericResponse(raw)
 }
 
-export async function fetchFallbackFlights() {
+export async function fetchFallbackFlights(bounds = FALLBACK_BBOX) {
   if (!isFallbackFeedEnabled()) {
     throw new Error('Fallback feed not configured')
   }
@@ -296,7 +325,7 @@ export async function fetchFallbackFlights() {
   const timeoutMs = Number.isFinite(FEED_CONFIG.timeoutMs)
     ? Math.min(Math.max(FEED_CONFIG.timeoutMs, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS)
     : 14_000
-  const url = buildFallbackUrl()
+  const url = buildFallbackUrl(bounds)
 
   const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   if (!res.ok) throw new Error(`Fallback feed ${res.status}`)

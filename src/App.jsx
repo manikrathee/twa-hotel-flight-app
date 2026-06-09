@@ -7,6 +7,9 @@ import { getFallbackFeedLabel } from './api/fallbackFeed'
 import useFlights from './hooks/useFlights'
 import useWeather from './hooks/useWeather'
 import useFlightHistory from './hooks/useFlightHistory'
+import useDeviceLocation from './hooks/useDeviceLocation'
+import { INITIAL_VIEW } from './components/flightMapConfig'
+import { JFK, MAP_RADIUS_MI } from './config/airspace'
 
 const LIST_PANEL_MIN = 320
 const LIST_PANEL_MAX = 560
@@ -64,6 +67,15 @@ export default function App() {
   const [timelapseSpeed, setTimelapseSpeed] = useState(TIMELAPSE_SPEEDS[1] ?? 2)
   const isHistoryMode = viewMode !== MODE_LIVE
 
+  const deviceLocation = useDeviceLocation({
+    fallbackCenter: JFK,
+    fallbackRadiusMi: MAP_RADIUS_MI,
+    timeoutMs: 9000,
+  })
+  const searchCenter = deviceLocation.center || JFK
+  const searchRadiusMi = deviceLocation.radiusMi
+  const searchUsesDeviceCenter = deviceLocation.isDeviceLocation
+
   const {
     flights,
     loading,
@@ -75,14 +87,19 @@ export default function App() {
     dataSource,
     pollMs,
     isConstrained,
-  } = useFlights(selectedId)
+  } = useFlights(selectedId, {
+    searchCenter,
+    searchRadiusMi,
+    applyJfkRouteFilter: !searchUsesDeviceCenter,
+  })
 
   const history = useFlightHistory({
-    enabled: isHistoryMode,
+    enabled: true,
     windowMs: historyWindowMs,
     isPlaying: viewMode === MODE_TIMELAPSE && timelapsePlaying,
     speedMultiplier: timelapseSpeed,
     refreshKey: `${lastUpdated?.getTime() ?? 0}-${viewMode}-${historyWindowMs}`,
+    selectedIcao: selectedId,
   })
 
   const { weather } = useWeather()
@@ -96,6 +113,25 @@ export default function App() {
     ? flights.find(f => String(f.icao24 || '').toLowerCase() === selectedId)
     : null
   const selectedHistoryFlight = selectedId ? (history.latestByIcao?.get(selectedId) ?? null) : null
+
+  const mapInitialView = useMemo(() => {
+    if (!searchCenter) return INITIAL_VIEW
+    const zoom = searchRadiusMi > 80
+      ? 9.4
+      : searchRadiusMi > 35
+        ? 10
+        : searchRadiusMi > 18
+          ? 10.8
+          : 11.6
+
+    return {
+      ...INITIAL_VIEW,
+      center: [searchCenter.lon, searchCenter.lat],
+      zoom,
+      bearing: 0,
+      pitch: 52,
+    }
+  }, [searchCenter?.lat, searchCenter?.lon, searchRadiusMi])
   const selectedFlightForMap = useMemo(() => {
     if (!selectedId) return null
     return activeFlights.find(f => String(f.icao24 || '').toLowerCase() === selectedId) || null
@@ -123,7 +159,11 @@ export default function App() {
   const detailTrackRefreshKey = useMemo(() => {
     return `${selectedId ?? ''}:${selectedSource}:${detailFeedMode}:${lastUpdated?.getTime() ?? 0}`
   }, [selectedId, selectedSource, detailFeedMode, lastUpdated])
-  const detailConnectionLabel = dataSource?.type === 'fallback' ? getFallbackFeedLabel() : 'OpenSky Network'
+  const detailConnectionLabel = dataSource?.type === 'fallback'
+    ? getFallbackFeedLabel()
+    : dataSource?.type === 'cache'
+      ? (dataSource?.cacheSource === 'mock' ? 'Simulated traffic cache' : 'Local DB cache')
+      : 'OpenSky Network'
   const historyTimeline = isHistoryMode ? {
     mode: viewMode,
     speed: timelapseSpeed,
@@ -318,7 +358,7 @@ export default function App() {
           onTimelapseSpeedChange={setTimelapseSpeed}
           timelapsePlaying={timelapsePlaying}
           onTimelapsePlayingChange={setTimelapsePlaying}
-          hasHistoryData={history.isReady}
+          hasHistoryData={history.hasData}
         />
         <div role="status" aria-live="assertive" aria-atomic="true" style={{
           flex: 1, display: 'flex', flexDirection: 'column',
@@ -370,7 +410,7 @@ export default function App() {
         onTimelapseSpeedChange={setTimelapseSpeed}
         timelapsePlaying={timelapsePlaying}
         onTimelapsePlayingChange={setTimelapsePlaying}
-        hasHistoryData={history.isReady}
+        hasHistoryData={history.hasData}
       />
 
       <div className="main-layout">
@@ -395,9 +435,10 @@ export default function App() {
             track={trackForMap}
             leftPanelWidth={listPanelWidth}
             rightPanelWidth={detailPanelWidth}
-            historyPathFeatures={isHistoryMode ? history.pathFeatures : null}
+            historyPathFeatures={history.pathFeatures}
             congestionFeatures={isHistoryMode ? history.congestion : null}
             timeline={historyTimeline}
+            initialView={mapInitialView}
           />
           {visibleRunwayAlert && (
             <div style={{
@@ -538,7 +579,7 @@ export default function App() {
             ACQUIRING TRAFFIC
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-dim)', letterSpacing: 0.2 }}>
-            Connecting to {detailConnectionLabel} · KJFK
+            Connecting to {detailConnectionLabel}
           </div>
         </div>
       )}
