@@ -1,8 +1,15 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
+import { gsap } from 'gsap'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { INITIAL_VIEW, JFK_RUNWAYS, MAP_STYLE, RUNWAY_LABELS, TWA_HOTEL } from './flightMapConfig'
-import { buildPlaneFeatures, buildPlaneSourceDiff, createPlaneImageData, getTrackCoordinates } from './flightMapHelpers'
+import {
+  buildPlaneFeatures,
+  buildPlaneSourceDiff,
+  createPlaneImageData,
+  getTrackCoordinates,
+  planeFeatureStateMap,
+} from './flightMapHelpers'
 import { bearingDeg, distanceKm } from '../utils/geo'
 import { JFK } from '../config/airspace'
 
@@ -15,6 +22,10 @@ const FALLBACK_THEME = {
   amberRgb: '243, 190, 124',
   textSoftRgb: '84, 96, 112',
 }
+const PLANE_ICON_SIZE = 64
+const PLANE_SELECTED_SCALE = 1.06
+const PLANE_DEFAULT_SCALE = 0.88
+const PULSE_RING_SIZE = Math.round(PLANE_ICON_SIZE * PLANE_SELECTED_SCALE)
 
 function resolveThemeRGB(cssVar, fallback) {
   if (typeof document === 'undefined') return fallback
@@ -140,6 +151,62 @@ function withAlpha(rgb, alpha) {
   return `rgba(${rgb}, ${alpha})`
 }
 
+function historyPathColorExpr(selectedIcao, mapTheme) {
+  const fallback = [
+    'case',
+    ['==', ['get', 'sampleKind'], 'track'],
+    withAlpha(mapTheme.redAlt, 0.29),
+    withAlpha(mapTheme.cyanAlt, 0.21),
+  ]
+  if (!selectedIcao) return fallback
+  return [
+    'case',
+    ['==', ['get', 'icao24'], selectedIcao],
+    withAlpha(mapTheme.cyanAlt, 0.98),
+    fallback,
+  ]
+}
+
+function historyPathWidthExpr(selectedIcao) {
+  const base = ['interpolate', ['linear'], ['coalesce', ['get', 'pointCount'], 2], 2, 1.2, 12, 2.9]
+  if (!selectedIcao) return base
+  return [
+    'case',
+    ['==', ['get', 'icao24'], selectedIcao],
+    ['interpolate', ['linear'], ['coalesce', ['get', 'pointCount'], 2], 2, 1.8, 12, 3.7],
+    base,
+  ]
+}
+
+function historyPathOpacityExpr(selectedIcao) {
+  const base = ['case',
+    ['==', ['get', 'sampleKind'], 'track'],
+    0.29,
+    0.2,
+  ]
+  if (!selectedIcao) return base
+  return [
+    'case',
+    ['==', ['get', 'icao24'], selectedIcao],
+    0.95,
+      ['case',
+        ['==', ['get', 'sampleKind'], 'track'],
+        0.23,
+        0.18,
+      ],
+  ]
+}
+
+function historyPathDashExpr(selectedIcao) {
+  if (!selectedIcao) return [6, 3]
+  return [
+    'case',
+    ['==', ['get', 'icao24'], selectedIcao],
+    [3, 6],
+    [7, 4],
+  ]
+}
+
 function jfkMarkerNode() {
   const el = document.createElement('div')
   el.className = 'jfk-airport-marker'
@@ -153,6 +220,11 @@ function jfkMarkerNode() {
 
 function normalizeFlightId(value) {
   return String(value || '').trim().toLowerCase()
+}
+
+function normalizeDisplayText(value, fallback) {
+  const text = String(value || '').trim()
+  return text || fallback
 }
 
 function resolveSelectedCoords(map, selectedIcao) {
@@ -184,6 +256,23 @@ function resolvePulseCoords(map, selectedIcao, selectedLng, selectedLat) {
   if (fromMap) return fromMap
   return normalizeLngLat(selectedLng, selectedLat)
 }
+
+function normalizeInitialView(raw) {
+  const center = normalizeLngLat(raw?.center?.[0], raw?.center?.[1])
+  if (!center) return INITIAL_VIEW
+
+  const zoom = Number(raw?.zoom)
+  const pitch = Number(raw?.pitch)
+  const bearing = Number(raw?.bearing)
+
+  return {
+    ...INITIAL_VIEW,
+    center,
+    zoom: Number.isFinite(zoom) ? zoom : INITIAL_VIEW.zoom,
+    pitch: Number.isFinite(pitch) ? pitch : INITIAL_VIEW.pitch,
+    bearing: Number.isFinite(bearing) ? bearing : INITIAL_VIEW.bearing,
+  }
+}
 export default function FlightMap({
   flights,
   selectedFlight,
@@ -191,6 +280,7 @@ export default function FlightMap({
   onRunwaySelect,
   onHistorySelect,
   track,
+  initialView = INITIAL_VIEW,
   historyPathFeatures,
   congestionFeatures,
   timeline,
@@ -201,9 +291,13 @@ export default function FlightMap({
   const mapRef = useRef(null)
   const isLoadedRef = useRef(false)
   const pulseMarkerRef = useRef(null)
+  const pulseCoordsRef = useRef(null)
+  const pulseTimelineRef = useRef(null)
+  const pulseMoveTweenRef = useRef(null)
+  const pulseAnimatedCoordRef = useRef(null)
   const jfkMarkerRef = useRef(null)
   const onHistorySelectRef = useRef(null)
-  const prevIcaoSetRef = useRef(null)
+  const prevPlaneStateRef = useRef(null)
   const onRunwaySelectRef = useRef(onRunwaySelect)
   const flightsRef = useRef(flights)
   const onSelectRef = useRef(onSelect)
@@ -219,6 +313,7 @@ export default function FlightMap({
   }, [flights, selectedFlight])
   const selectedFlightForTracking = selectedFlightForMap || selectedFlight
   const selectedIcao = selectedFlightForTracking?.icao24 ?? null
+  const selectedIcaoNormalized = normalizeFlightId(selectedIcao)
   const selectedLng = selectedFlightForTracking?.longitude
   const selectedLat = selectedFlightForTracking?.latitude
   const theme = {
@@ -228,6 +323,35 @@ export default function FlightMap({
     amber: resolveThemeRGB('--amber-rgb', FALLBACK_THEME.amberRgb),
     textSoft: resolveThemeRGB('--text-soft-rgb', FALLBACK_THEME.textSoftRgb),
   }
+  const themeCyan = theme.cyan
+  const themeCyanAlt = theme.cyanAlt
+  const themeRedAlt = theme.redAlt
+  const themeAmber = theme.amber
+  const themeTextSoft = theme.textSoft
+  const initialCameraView = useMemo(() => normalizeInitialView(initialView), [
+    initialView?.center?.[0],
+    initialView?.center?.[1],
+    initialView?.zoom,
+    initialView?.pitch,
+    initialView?.bearing,
+  ])
+  const initialViewRef = useRef(initialCameraView)
+  const mapThemeRef = useRef({
+    cyan: themeCyan,
+    cyanAlt: themeCyanAlt,
+    amber: themeAmber,
+    redAlt: themeRedAlt,
+    textSoft: themeTextSoft,
+  })
+  useEffect(() => {
+    mapThemeRef.current = {
+      cyan: themeCyan,
+      cyanAlt: themeCyanAlt,
+      amber: themeAmber,
+      redAlt: themeRedAlt,
+      textSoft: themeTextSoft,
+    }
+  }, [themeCyan, themeCyanAlt, themeAmber, themeRedAlt, themeTextSoft])
 
   useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
   useEffect(() => { onRunwaySelectRef.current = onRunwaySelect }, [onRunwaySelect])
@@ -237,11 +361,12 @@ export default function FlightMap({
   // Init map once
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return
+    const mapTheme = mapThemeRef.current
 
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: MAP_STYLE,
-      ...INITIAL_VIEW,
+      ...initialCameraView,
       attributionControl: false,
       maxPitch: 85,
     })
@@ -262,7 +387,7 @@ export default function FlightMap({
         source: 'runways',
         layout: { 'line-cap': 'square' },
         paint: {
-          'line-color': withAlpha(theme.textSoft, 0.08),
+          'line-color': withAlpha(mapTheme.textSoft, 0.08),
           'line-width': 28,
           'line-blur': 6,
         },
@@ -277,8 +402,8 @@ export default function FlightMap({
           'line-color': [
             'match',
             ['get', 'surface'],
-            'ASPH', withAlpha(theme.amber, 0.72),
-            withAlpha(theme.cyanAlt, 0.24),
+            'ASPH', withAlpha(mapTheme.amber, 0.72),
+            withAlpha(mapTheme.cyanAlt, 0.24),
           ],
           'line-width': 16,
         },
@@ -289,7 +414,7 @@ export default function FlightMap({
         type: 'line',
         source: 'runways',
         paint: {
-          'line-color': withAlpha(theme.textSoft, 0.45),
+          'line-color': withAlpha(mapTheme.textSoft, 0.45),
           'line-width': 1.2,
           'line-dasharray': [12, 10],
         },
@@ -324,7 +449,7 @@ export default function FlightMap({
         type: 'line',
         source: 'path',
         paint: {
-          'line-color': withAlpha(theme.cyanAlt, 1),
+          'line-color': withAlpha(mapTheme.cyanAlt, 1),
           'line-width': 2,
           'line-opacity': 0.7,
           'line-dasharray': [6, 4],
@@ -345,14 +470,10 @@ export default function FlightMap({
           visibility: 'visible',
         },
         paint: {
-          'line-color': [
-            'case',
-            ['==', ['get', 'sampleKind'], 'track'],
-            withAlpha(theme.redAlt, 0.42),
-            withAlpha(theme.cyanAlt, 0.32),
-          ],
-          'line-width': ['interpolate', ['linear'], ['coalesce', ['get', 'pointCount'], 2], 2, 1.4, 12, 3.4],
-          'line-opacity': ['interpolate', ['linear'], ['coalesce', ['get', 'pointCount'], 2], 2, 0.22, 12, 0.9],
+          'line-color': historyPathColorExpr(selectedIcaoNormalized, mapTheme),
+          'line-width': historyPathWidthExpr(selectedIcaoNormalized),
+          'line-opacity': historyPathOpacityExpr(selectedIcaoNormalized),
+          'line-dasharray': historyPathDashExpr(selectedIcaoNormalized),
         },
       })
 
@@ -371,11 +492,11 @@ export default function FlightMap({
             ['linear'],
             ['get', 'count'],
             1,
-            `rgba(${theme.cyan}, 0.22)`,
+            `rgba(${mapTheme.cyan}, 0.22)`,
             8,
-            `rgba(${theme.amber}, 0.35)`,
+            `rgba(${mapTheme.amber}, 0.35)`,
             20,
-            `rgba(${theme.redAlt}, 0.55)`,
+            `rgba(${mapTheme.redAlt}, 0.55)`,
           ],
           'circle-opacity': ['interpolate', ['linear'], ['get', 'count'], 1, 0.16, 20, 0.45],
           'circle-stroke-width': 0,
@@ -394,19 +515,22 @@ export default function FlightMap({
         source: 'planes',
         layout: {
           'icon-image': 'plane-icon',
-          'icon-size': ['case', ['get', 'selected'], 1.35, 0.9],
-          'icon-rotate': ['get', 'heading'],
+          'icon-anchor': 'center',
+          'icon-size': ['case', ['get', 'selected'], PLANE_SELECTED_SCALE, PLANE_DEFAULT_SCALE],
+          'icon-rotate': ['coalesce', ['get', 'heading'], 0],
           'icon-rotation-alignment': 'map',
+          'icon-pitch-alignment': 'viewport',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
         paint: {
-          'icon-color': ['case', ['get', 'selected'], withAlpha(theme.cyanAlt, 1), withAlpha(theme.textSoft, 0.86)],
+          'icon-color': ['case', ['get', 'selected'], withAlpha(mapTheme.cyanAlt, 1), withAlpha(mapTheme.textSoft, 0.86)],
           'icon-halo-color': ['case',
-            ['get', 'selected'], withAlpha(theme.cyanAlt, 0.5),
-            withAlpha(theme.textSoft, 0.26),
+            ['get', 'selected'], withAlpha(mapTheme.cyanAlt, 0.55),
+            withAlpha(mapTheme.textSoft, 0.2),
           ],
-          'icon-halo-width': ['case', ['get', 'selected'], 6, 1.5],
+          'icon-halo-width': ['case', ['get', 'selected'], 3.6, 1.2],
+          'icon-halo-blur': ['case', ['get', 'selected'], 0.75, 0.45],
         },
       })
 
@@ -414,9 +538,9 @@ export default function FlightMap({
       const hotelEl = document.createElement('div')
       hotelEl.style.cssText = [
         'width:18px', 'height:18px', 'border-radius:50%',
-        `border:2px solid rgba(${theme.redAlt},1)`,
-        `background:${withAlpha(theme.redAlt, 0.18)}`,
-        `box-shadow:0 0 14px ${withAlpha(theme.redAlt, 0.55)},0 0 4px ${withAlpha(theme.redAlt, 0.75)}`,
+        `border:2px solid rgba(${mapTheme.redAlt},1)`,
+        `background:${withAlpha(mapTheme.redAlt, 0.18)}`,
+        `box-shadow:0 0 14px ${withAlpha(mapTheme.redAlt, 0.55)},0 0 4px ${withAlpha(mapTheme.redAlt, 0.75)}`,
         'cursor:default', 'pointer-events:none',
       ].join(';')
       new maplibregl.Marker({ element: hotelEl, anchor: 'center' })
@@ -508,7 +632,7 @@ export default function FlightMap({
           runwayId: feature.properties?.id,
           runwayLabel: feature.properties?.id,
           flightId: incomingFlight.icao24,
-          flightLabel: (incomingFlight.callsign || incomingFlight.icao24).trim(),
+          flightLabel: normalizeDisplayText(incomingFlight.callsign, incomingFlight.icao24),
         })
       })
 
@@ -531,54 +655,167 @@ export default function FlightMap({
 
     return () => {
       isLoadedRef.current = false
+      pulseTimelineRef.current?.kill()
+      pulseTimelineRef.current = null
+      pulseMoveTweenRef.current?.kill()
+      pulseMoveTweenRef.current = null
+      pulseMarkerRef.current?.remove()
+      pulseMarkerRef.current = null
+      pulseCoordsRef.current = null
+      pulseAnimatedCoordRef.current = null
       jfkMarkerRef.current?.remove()
       jfkMarkerRef.current = null
       map.remove()
       mapRef.current = null
     }
-  }, [theme.cyan, theme.cyanAlt, theme.redAlt, theme.textSoft, theme.amber])
+  }, [])
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return
+    const map = mapRef.current
+
+    const runwayGlow = map.getLayer('runways-glow')
+    if (runwayGlow) {
+      map.setPaintProperty('runways-glow', 'line-color', withAlpha(themeTextSoft, 0.08))
+    }
+
+    const runwaySurface = map.getLayer('runways-surface')
+    if (runwaySurface) {
+      map.setPaintProperty('runways-surface', 'line-color', [
+        'match',
+        ['get', 'surface'],
+        'ASPH', withAlpha(themeAmber, 0.72),
+        withAlpha(themeCyanAlt, 0.24),
+      ])
+    }
+
+    const runwayCenter = map.getLayer('runways-center')
+    if (runwayCenter) {
+      map.setPaintProperty('runways-center', 'line-color', withAlpha(themeTextSoft, 0.45))
+    }
+
+    const pathLine = map.getLayer('path-line')
+    if (pathLine) {
+      map.setPaintProperty('path-line', 'line-color', withAlpha(themeCyanAlt, 1))
+    }
+
+    const historyPaths = map.getLayer('history-paths-line')
+    if (historyPaths) {
+      map.setPaintProperty('history-paths-line', 'line-color', historyPathColorExpr(selectedIcaoNormalized, {
+        redAlt: themeRedAlt,
+        cyanAlt: themeCyanAlt,
+      }))
+      map.setPaintProperty('history-paths-line', 'line-width', historyPathWidthExpr(selectedIcaoNormalized))
+      map.setPaintProperty('history-paths-line', 'line-opacity', historyPathOpacityExpr(selectedIcaoNormalized))
+      map.setPaintProperty('history-paths-line', 'line-dasharray', historyPathDashExpr(selectedIcaoNormalized))
+    }
+
+    const congestion = map.getLayer('congestion-heat')
+    if (congestion) {
+      map.setPaintProperty('congestion-heat', 'circle-color', [
+        'interpolate',
+        ['linear'],
+        ['get', 'count'],
+        1,
+        `rgba(${themeCyan}, 0.22)`,
+        8,
+        `rgba(${themeAmber}, 0.35)`,
+        20,
+        `rgba(${themeRedAlt}, 0.55)`,
+      ])
+    }
+
+    const planes = map.getLayer('planes-layer')
+    if (planes) {
+      map.setPaintProperty('planes-layer', 'icon-color', [
+        'case',
+        ['get', 'selected'],
+        withAlpha(themeCyanAlt, 1),
+        withAlpha(themeTextSoft, 0.86),
+      ])
+      map.setPaintProperty('planes-layer', 'icon-halo-color', [
+        'case',
+        ['get', 'selected'],
+        withAlpha(themeCyanAlt, 0.55),
+        withAlpha(themeTextSoft, 0.2),
+      ])
+      map.setPaintProperty('planes-layer', 'icon-halo-width', ['case', ['get', 'selected'], 3.6, 1.2])
+      map.setPaintProperty('planes-layer', 'icon-halo-blur', ['case', ['get', 'selected'], 0.75, 0.45])
+    }
+  }, [mapReady, themeCyan, themeCyanAlt, themeRedAlt, themeTextSoft, themeAmber, selectedIcaoNormalized])
 
   // Update plane positions — incremental updateData() after first load
   useEffect(() => {
     if (!mapReady || !mapRef.current) {
-      prevIcaoSetRef.current = null
+      prevPlaneStateRef.current = null
       return
     }
     const src = mapRef.current.getSource('planes')
     if (!src) return
 
     if (!flights.length) {
-      if (prevIcaoSetRef.current?.size) {
+      if (prevPlaneStateRef.current?.size) {
         src.setData({ type: 'FeatureCollection', features: [] })
       }
-      prevIcaoSetRef.current = new Set()
+      prevPlaneStateRef.current = null
       return
     }
 
     const features = buildPlaneFeatures(flights, selectedIcao)
+    const nextPlaneState = planeFeatureStateMap(features)
 
-    if (prevIcaoSetRef.current === null) {
+    if (prevPlaneStateRef.current === null) {
       src.setData({ type: 'FeatureCollection', features })
-      prevIcaoSetRef.current = new Set(features.map(f => f.properties.icao24))
+      prevPlaneStateRef.current = nextPlaneState
       return
     }
 
-    const prevSet = prevIcaoSetRef.current
-    const { add, update, remove, nextSet } = buildPlaneSourceDiff(features, prevSet)
+    const prevState = prevPlaneStateRef.current
+    const { add, update, remove } = buildPlaneSourceDiff(features, prevState)
 
     if (add.length || update.length || remove.length) {
       src.updateData({ add, update, remove })
     }
 
-    prevIcaoSetRef.current = nextSet
+    prevPlaneStateRef.current = nextPlaneState
   }, [flights, selectedIcao, mapReady])
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
     const src = mapRef.current.getSource('history-paths')
     if (!src) return
-    src.setData(historyPathFeatures?.features?.length ? historyPathFeatures : EMPTY_GEOJSON)
-  }, [mapReady, historyPathFeatures])
+    if (!historyPathFeatures?.features?.length) {
+      src.setData(EMPTY_GEOJSON)
+      return
+    }
+
+    if (!selectedIcaoNormalized) {
+      src.setData(historyPathFeatures)
+      return
+    }
+
+    const selectedFeatureCollection = []
+    const otherFeatures = []
+
+    for (const feature of historyPathFeatures.features) {
+      const icao24 = normalizeFlightId(feature?.properties?.icao24)
+      if (icao24 === selectedIcaoNormalized) {
+        selectedFeatureCollection.push(feature)
+      } else {
+        otherFeatures.push(feature)
+      }
+    }
+
+    if (!selectedFeatureCollection.length) {
+      src.setData(historyPathFeatures)
+      return
+    }
+
+    src.setData({
+      type: 'FeatureCollection',
+      features: [...otherFeatures, ...selectedFeatureCollection],
+    })
+  }, [mapReady, historyPathFeatures, selectedIcaoNormalized])
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return
@@ -589,25 +826,86 @@ export default function FlightMap({
 
   // Pulse ring on selected plane (single DOM marker)
   useEffect(() => {
+    if (!mapReady || !selectedIcao || !mapRef.current) {
+      pulseCoordsRef.current = null
+      pulseAnimatedCoordRef.current = null
+      return
+    }
+    pulseCoordsRef.current = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
+  }, [mapReady, selectedIcao, selectedLat, selectedLng])
+
+  useEffect(() => {
+    pulseTimelineRef.current?.kill()
+    pulseTimelineRef.current = null
+    pulseMoveTweenRef.current?.kill()
+    pulseMoveTweenRef.current = null
+
     pulseMarkerRef.current?.remove()
     pulseMarkerRef.current = null
     if (!mapReady || !mapRef.current || !selectedIcao) return
 
-    const coords = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
+    const coords = pulseCoordsRef.current
     if (!coords) return
 
     const el = document.createElement('div')
     el.style.cssText = [
-      'width:44px', 'height:44px', 'border-radius:50%',
-      `border:2px solid ${withAlpha(theme.cyanAlt, 0.6)}`,
-      `background:${withAlpha(theme.cyanAlt, 0.06)}`,
-      'animation:ring-expand 1.5s ease-out infinite',
+      `width:${PULSE_RING_SIZE}px`,
+      `height:${PULSE_RING_SIZE}px`,
+      'position:relative',
       'pointer-events:none',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
     ].join(';')
-    pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+    const ring = document.createElement('div')
+    ring.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'box-sizing:border-box',
+      'border-radius:50%',
+      `border:2px solid ${withAlpha(themeCyanAlt, 0.6)}`,
+      `background:${withAlpha(themeCyanAlt, 0.06)}`,
+      'transform-origin:center',
+    ].join(';')
+    el.appendChild(ring)
+    gsap.set(ring, { scale: 1, opacity: 0.74 })
+    pulseTimelineRef.current = gsap.timeline({
+      repeat: -1,
+      defaults: {
+        ease: 'power2.out',
+      },
+    })
+    pulseTimelineRef.current.to(ring, {
+      scale: 2.45,
+      opacity: 0,
+      duration: 1.45,
+      ease: 'power2.out',
+    })
+    const centerDot = document.createElement('div')
+    const dotSize = Math.round(PULSE_RING_SIZE * 0.16)
+    centerDot.style.cssText = [
+      `width:${dotSize}px`,
+      `height:${dotSize}px`,
+      `border-radius:${Math.round(dotSize / 2)}px`,
+      `background:${withAlpha(themeCyanAlt, 0.95)}`,
+      'position:absolute',
+      `left:${Math.round((PULSE_RING_SIZE - dotSize) / 2)}px`,
+      `top:${Math.round((PULSE_RING_SIZE - dotSize) / 2)}px`,
+      'box-shadow:0 0 10px 2px rgba(0, 195, 255, 0.4)',
+    ].join(';')
+    el.appendChild(centerDot)
+    pulseMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center', offset: [0, 0] })
       .setLngLat(coords)
       .addTo(mapRef.current)
-  }, [selectedIcao, mapReady, theme.cyanAlt, selectedLat, selectedLng])
+    pulseAnimatedCoordRef.current = coords
+
+    return () => {
+      pulseTimelineRef.current?.kill()
+      pulseTimelineRef.current = null
+      pulseMoveTweenRef.current?.kill()
+      pulseMoveTweenRef.current = null
+    }
+  }, [selectedIcao, mapReady, themeCyanAlt])
 
   // Update pulse ring position as plane moves
   useEffect(() => {
@@ -616,7 +914,30 @@ export default function FlightMap({
     const coords = resolvePulseCoords(mapRef.current, selectedIcao, selectedLng, selectedLat)
     if (!coords) return
 
-    pulseMarkerRef.current.setLngLat(coords)
+    const marker = pulseMarkerRef.current
+    const prev = pulseAnimatedCoordRef.current
+    if (!prev) {
+      marker.setLngLat(coords)
+      pulseAnimatedCoordRef.current = coords
+      return
+    }
+    if (prev[0] === coords[0] && prev[1] === coords[1]) return
+
+    pulseMoveTweenRef.current?.kill()
+    const tweenState = { lng: prev[0], lat: prev[1] }
+    pulseMoveTweenRef.current = gsap.to(tweenState, {
+      lng: coords[0],
+      lat: coords[1],
+      duration: 0.22,
+      ease: 'power2.out',
+      overwrite: true,
+      onUpdate: () => {
+        marker.setLngLat([tweenState.lng, tweenState.lat])
+      },
+      onComplete: () => {
+        pulseAnimatedCoordRef.current = coords
+      },
+    })
   }, [selectedIcao, selectedLng, selectedLat])
 
   // Keep selected aircraft centered within visible map area while avoiding per-tick camera churn.
@@ -714,8 +1035,20 @@ export default function FlightMap({
   }, [mapReady, selectedIcao, selectedLat, selectedLng, track])
 
   const resetView = useCallback(() => {
-    mapRef.current?.flyTo({ ...INITIAL_VIEW, duration: 900, essential: true })
+    mapRef.current?.flyTo({ ...initialViewRef.current, duration: 900, essential: true })
   }, [])
+
+  useEffect(() => {
+    initialViewRef.current = initialCameraView
+    if (!mapReady || !mapRef.current || selectedIcao) return
+    if (userCameraGestureRef.current) return
+
+    mapRef.current.flyTo({
+      ...initialCameraView,
+      duration: 840,
+      essential: true,
+    })
+  }, [initialCameraView, mapReady, selectedIcao])
 
   const onMapKeyDown = useCallback((event) => {
     if (event.key === 'r' || event.key === 'R') {
@@ -796,7 +1129,7 @@ export default function FlightMap({
       <div
         ref={containerRef}
         role="application"
-        aria-label="Live flight map around KJFK. Press R to reset view, Escape to clear selected flight."
+        aria-label="Live flight map around your current location. Press R to reset view, Escape to clear selected flight."
         tabIndex={0}
         onKeyDown={onMapKeyDown}
         style={{ width: '100%', height: '100%' }}
@@ -835,7 +1168,7 @@ export default function FlightMap({
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            {(selectedFlightForTracking.callsign || selectedFlightForTracking.icao24).trim()} · LAST 90 MIN
+            {normalizeDisplayText(selectedFlightForTracking.callsign, selectedFlightForTracking.icao24)} · LAST 90 MIN
           </span>
         </div>
       )}

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -39,11 +39,12 @@
   --text-dim: #8a99ab;
   --heading: #eef2f7;
   --text-soft-rgb: 84, 96, 112;
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 8px;
   --radius-lg: 12px;
+  --focus-ring: 0 0 0 2px rgba(var(--cyan-alt-rgb), 0.25);
 }
 
 [data-theme='light'] {
@@ -79,6 +80,9 @@
   --text-dim: #4f607f;
   --heading: #082040;
   --text-soft-rgb: 90, 104, 129;
+  --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 html, body, #root {
@@ -136,6 +140,18 @@ body::before {
   overflow: hidden;
   position: relative;
   z-index: 5;
+}
+
+.detail-panel-shell {
+  background: linear-gradient(180deg, rgba(var(--cyan-alt-rgb), 0.03) 0%, var(--panel-strong) 36%, var(--panel-strong) 100%);
+  border-left: 1px solid var(--border-bright);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.28);
+}
+
+.detail-section-shell {
+  border-bottom: 1px solid var(--panel-line);
+  background: linear-gradient(180deg, rgba(var(--cyan-alt-rgb), 0.045) 0%, transparent 100%);
+  animation: detail-section-in 0.34s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .hudbar {
@@ -224,6 +240,12 @@ body::before {
   border-top-color: rgba(var(--cyan-rgb), 0.35) !important;
 }
 
+button:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.45; transform: scale(0.84); }
@@ -256,6 +278,19 @@ body::before {
 @keyframes selected-glow {
   0% { box-shadow: inset 0 0 0 1px rgba(var(--cyan-rgb), 0.12), 0 0 0 rgba(var(--cyan-rgb), 0); }
   100% { box-shadow: inset 0 0 0 1px rgba(var(--cyan-rgb), 0.22), 0 0 18px rgba(var(--cyan-rgb), 0.14); }
+}
+
+@keyframes detail-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+    filter: saturate(0.84);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: saturate(1);
+  }
 }
 
 @media (max-width: 1180px) {
