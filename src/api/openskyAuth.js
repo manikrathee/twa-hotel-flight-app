@@ -1,6 +1,7 @@
 const TOKEN_URL = '/api/opensky-auth'
 const REFRESH_BUFFER_MS = 60_000
 const AUTH_RETRY_MS = 60_000
+const AUTH_ENABLED = import.meta.env.VITE_OPENSKY_AUTH_ENABLED === 'true'
 
 let cachedToken = null
 let expiresAt = 0
@@ -47,6 +48,7 @@ async function fetchToken() {
 }
 
 export async function getAccessToken() {
+  if (!AUTH_ENABLED) return null
   if (cachedToken && Date.now() < expiresAt - REFRESH_BUFFER_MS) return cachedToken
   if (Date.now() < authRetryAfter) return null
   if (!inflightPromise) inflightPromise = fetchToken().finally(() => { inflightPromise = null })

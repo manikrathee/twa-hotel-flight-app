@@ -53,11 +53,13 @@ npm run dev
 
 ### OpenSky Auth Configuration
 
+Populate local credentials via [`.env.local.example`](/Users/manikrathee/.codex/worktrees/f252/twa-hotel-flight-app/.env.local.example) or equivalent shell env.
+
 - Browser never sends `client_secret` directly.
 - Vite dev server exchanges credentials at `/api/opensky-auth` using server-side env values.
 - Supported env names: `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET`.
 - Backward-compatible aliases also supported: `VITE_OPENSKY_CLIENT_ID` / `VITE_OPENSKY_CLIENT_SECRET`.
-- If credentials are missing, app falls back to anonymous OpenSky requests.
+- If credentials are missing, app runs on anonymous OpenSky quota and HUD status will show `ANON` / `AUTH REQUIRED`.
 
 ### Fallback Feed Configuration (JFK backup)
 
@@ -65,12 +67,18 @@ When primary OpenSky access is blocked, the app can switch to a separate JFK fee
 
 - `VITE_FALLBACK_FEED_URL` (required to enable): full URL or same-origin path to an alternate state feed.
 - `VITE_FALLBACK_FEED_PROVIDER`: `generic` (default), `opensky`, or `fr24`.
-- `VITE_FALLBACK_FEED_LABEL`: status label shown in HUD (default `KJFK FALLBACK`).
+- `VITE_FALLBACK_FEED_LABEL`: status label shown in HUD (default `BACKUP FEED`).
 - `VITE_FALLBACK_FEED_TIMEOUT_MS`: fetch timeout in ms (default `14000`).
 - `VITE_FALLBACK_PRIMARY_RETRY_MS`: cooldown before re-checking primary after a fallback switch (default `45000`).
 - `VITE_FALLBACK_TRACK_WINDOW_MS`: window in ms used to rebuild local paths for fallback-selected flights (defaults to 10 minutes when unset).
 - `VITE_FALLBACK_FEED_PROXY_TARGET`: optional Vite proxy target host for same-origin proxying.
 - `VITE_FALLBACK_FEED_PROXY_PATH`: optional proxy path (default `/api/jfk-fallback`) when proxy target is used.
+
+### Degraded Mode
+
+- Successful live or backup sessions are persisted as an area-scoped local snapshot for reuse during later holds or upstream failures.
+- Snapshot reuse is limited by recency and search area, to avoid replaying stale traffic for a different map location.
+- HUD source states now distinguish `LIVE`, `ANON`, `BACKUP FEED`, `SNAPSHOT`, `CACHE`, and `RATE LIMITED`.
 
 ## Gate
 

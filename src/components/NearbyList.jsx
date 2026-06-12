@@ -2,9 +2,16 @@ import { memo, useDeferredValue, useMemo } from 'react'
 import { getAirlineName, parseFlightNumber } from '../utils/aircraft'
 import { metersToFeet, msToKnots } from '../utils/geo'
 
-// Distance thresholds in km (roughly 10mi and 30mi)
 const KM_APPROACH = 16
 const KM_TERMINAL = 48
+
+const CHIP_STYLE = {
+  borderRadius: 16,
+  border: '1px solid rgba(255,255,255,0.08)',
+  background: 'linear-gradient(180deg, rgba(11, 18, 28, 0.34), rgba(11, 18, 28, 0.12))',
+  boxShadow: '0 16px 36px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)',
+  backdropFilter: 'blur(16px)',
+}
 
 function normalizeFlightId(value) {
   return String(value || '').trim().toLowerCase()
@@ -21,38 +28,62 @@ function sortFlightsByDistance(flights) {
 
 function ZoneHeader({ label, count, color, sublabel }) {
   return (
-    <div style={{
-      padding: '8px 16px 6px 16px',
-      display: 'flex', alignItems: 'center', gap: 10,
-      borderBottom: '1px solid var(--panel-line)',
-      borderTop: '1px solid var(--panel-line)',
-      background: 'var(--panel-soft)',
-      flexShrink: 0,
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 9,
+        padding: '0 2px',
+      }}
+    >
       <div style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0 }} />
-      <span style={{ fontSize: 12, color, fontWeight: 600 }}>
+      <span style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.08em' }}>
         {label}
       </span>
       {sublabel && (
-        <span style={{ fontSize: 12, color: 'var(--text-dim)', marginLeft: 2 }}>
+        <span style={{ fontSize: 11, color: 'rgba(var(--text-soft-rgb), 0.82)' }}>
           {sublabel}
         </span>
       )}
-      <div style={{ marginLeft: 'auto', fontSize: 12, color, opacity: 0.85, fontWeight: 600 }}>
+      <span
+        style={{
+          marginLeft: 'auto',
+          minWidth: 24,
+          textAlign: 'center',
+          borderRadius: 999,
+          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.04)',
+          padding: '2px 6px',
+          fontSize: 10,
+          fontWeight: 700,
+          color,
+        }}
+      >
         {count}
-      </div>
+      </span>
     </div>
   )
 }
 
 function NearbyList({ flights, selectedId, onSelect, width, loading, error, collapsed = false, onToggleCollapse }) {
   const deferredFlights = useDeferredValue(flights)
-  const sortedFlights = useMemo(() => sortFlightsByDistance(deferredFlights), [deferredFlights])
+  const sortedFlights = useMemo(() => {
+    return sortFlightsByDistance(deferredFlights).filter((flight) => {
+      const baroAltitude = toFiniteNumber(flight?.baro_altitude)
+      const geoAltitude = toFiniteNumber(flight?.geo_altitude)
+      const speed = toFiniteNumber(flight?.velocity)
+      const altitude = baroAltitude ?? geoAltitude
+      const hasTelemetry = altitude != null || speed != null
+      const isMoving = (speed ?? 0) > 18
+      const isAirborne = flight?.on_ground !== true && (altitude == null || altitude > 40 || isMoving)
+      return hasTelemetry && isAirborne
+    })
+  }, [deferredFlights])
 
   const { approach, terminal, enroute, totalShown, totalShownLabel } = useMemo(() => {
     const approachZone = []
     const terminalZone = []
-    const enrouteAllZone = []
+    const enrouteZone = []
 
     for (const flight of sortedFlights) {
       if (flight.distKm < KM_APPROACH) {
@@ -60,47 +91,45 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
       } else if (flight.distKm < KM_TERMINAL) {
         terminalZone.push(flight)
       } else {
-        enrouteAllZone.push(flight)
+        enrouteZone.push(flight)
       }
     }
 
     return {
       approach: approachZone,
       terminal: terminalZone,
-      enroute: enrouteAllZone,
-      totalShown: approachZone.length + terminalZone.length + enrouteAllZone.length,
-      totalShownLabel: `${approachZone.length + terminalZone.length + enrouteAllZone.length}`,
+      enroute: enrouteZone,
+      totalShown: approachZone.length + terminalZone.length + enrouteZone.length,
+      totalShownLabel: `${approachZone.length + terminalZone.length + enrouteZone.length}`,
     }
   }, [sortedFlights])
 
   const showNoData = !loading && totalShown === 0
-  const enrouteSummary = enroute.length
   const emptyMessage = error && !loading
-      ? `Flight feed issue: ${error}`
-      : loading
-        ? 'Acquiring nearby traffic…'
-        : 'No nearby traffic in range.'
+    ? `Flight feed issue: ${error}`
+    : loading
+      ? 'Acquiring nearby traffic…'
+      : 'No nearby traffic in range.'
 
   if (collapsed) {
     return (
-      <div style={{
-        width,
-        position: 'absolute',
-        top: 16,
-        left: 16,
-        zIndex: 180,
-        height: 'calc(100% - 32px)',
-        background: 'rgba(7, 13, 21, 0.88)',
-        backdropFilter: 'blur(10px) saturate(1.08)',
-        border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
-        borderRadius: 14,
-        boxShadow: '0 22px 52px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        paddingTop: 12,
-        gap: 12,
-      }}>
+      <div
+        style={{
+          width,
+          position: 'absolute',
+          top: 16,
+          left: 16,
+          bottom: 16,
+          zIndex: 180,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+          padding: '8px 6px',
+          ...CHIP_STYLE,
+          background: 'linear-gradient(180deg, rgba(11, 18, 28, 0.3), rgba(11, 18, 28, 0.08))',
+        }}
+      >
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -108,41 +137,44 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
           style={{
             width: 30,
             height: 30,
-            borderRadius: 6,
-            border: '1px solid rgba(var(--cyan-alt-rgb), 0.35)',
+            borderRadius: 8,
+            border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
             background: 'rgba(var(--cyan-alt-rgb), 0.08)',
             color: 'var(--cyan-alt)',
             cursor: 'pointer',
-            fontSize: 15,
+            fontSize: 16,
             lineHeight: '28px',
             textAlign: 'center',
           }}
         >
           ›
         </button>
-        <div style={{
-          writingMode: 'vertical-rl',
-          transform: 'rotate(180deg)',
-          fontSize: 10,
-          letterSpacing: 1.2,
-          color: 'var(--text-dim)',
-          fontFamily: 'var(--font-mono)',
-        }}>
+        <div
+          style={{
+            writingMode: 'vertical-rl',
+            transform: 'rotate(180deg)',
+            fontSize: 10,
+            letterSpacing: 1.35,
+            color: 'var(--text-dim)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
           NEARBY TRAFFIC
         </div>
-        <div style={{
-          marginTop: 'auto',
-          marginBottom: 12,
-          minWidth: 28,
-          textAlign: 'center',
-          borderRadius: 999,
-          border: '1px solid rgba(var(--cyan-alt-rgb), 0.28)',
-          background: 'rgba(var(--cyan-alt-rgb), 0.14)',
-          color: 'var(--cyan)',
-          padding: '2px 6px',
-          fontSize: 11,
-          fontWeight: 600,
-        }}>
+        <div
+          style={{
+            marginTop: 'auto',
+            minWidth: 28,
+            textAlign: 'center',
+            borderRadius: 999,
+            border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
+            background: 'rgba(var(--cyan-alt-rgb), 0.12)',
+            color: 'var(--cyan)',
+            padding: '3px 6px',
+            fontSize: 11,
+            fontWeight: 700,
+          }}
+        >
           {totalShownLabel}
         </div>
       </div>
@@ -150,36 +182,48 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
   }
 
   return (
-    <div style={{
-      width,
-      position: 'absolute',
-      top: 16,
-      left: 16,
-      zIndex: 180,
-      maxHeight: 'calc(100% - 32px)',
-      background: 'rgba(7, 13, 21, 0.88)',
-      backdropFilter: 'blur(12px) saturate(1.1)',
-      border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
-      borderRadius: 14,
-      boxShadow: '0 22px 52px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '14px 16px 12px',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexShrink: 0,
-        background: 'linear-gradient(180deg, rgba(13,24,36,0.95), rgba(8,13,20,0.84))',
-      }}>
-        <div style={{ fontSize: 14, color: 'var(--heading)', fontWeight: 700 }}>
-          NEARBY TRAFFIC
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div
+        style={{
+          width,
+          position: 'absolute',
+          top: 16,
+          left: 16,
+          maxHeight: 'min(calc(100% - 32px), 76vh)',
+          zIndex: 180,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+    >
+      <div
+        style={{
+          ...CHIP_STYLE,
+          padding: '12px 14px 11px',
+          display: 'grid',
+          gap: 10,
+          background: 'linear-gradient(180deg, rgba(10, 17, 27, 0.44), rgba(10, 17, 27, 0.18))',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 700, letterSpacing: '0.1em' }}>
+            NEARBY TRAFFIC
+          </div>
+          <div
+            style={{
+              marginLeft: 'auto',
+              minWidth: 30,
+              textAlign: 'center',
+              borderRadius: 999,
+              border: '1px solid rgba(var(--cyan-alt-rgb), 0.22)',
+              background: 'rgba(var(--cyan-alt-rgb), 0.08)',
+              color: 'var(--cyan)',
+              padding: '3px 8px',
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            {totalShownLabel}
+          </div>
           <button
             type="button"
             onClick={onToggleCollapse}
@@ -187,9 +231,9 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
             style={{
               width: 28,
               height: 28,
-              borderRadius: 6,
-              border: '1px solid rgba(var(--text-soft-rgb), 0.35)',
-              background: 'rgba(var(--text-soft-rgb), 0.06)',
+              borderRadius: 8,
+              border: '1px solid rgba(var(--text-soft-rgb), 0.25)',
+              background: 'rgba(255,255,255,0.03)',
               color: 'var(--text-dim)',
               cursor: 'pointer',
               fontSize: 15,
@@ -200,61 +244,105 @@ function NearbyList({ flights, selectedId, onSelect, width, loading, error, coll
             ‹
           </button>
         </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 54px 58px',
+            gap: 0,
+            padding: '0 2px',
+          }}
+        >
+          {['CALLSIGN', 'ALT', 'SPD'].map((header) => (
+            <span key={header} style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 700, letterSpacing: '0.08em' }}>
+              {header}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Column headers */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 60px 64px',
-        gap: 0,
-        padding: '8px 16px 8px 18px',
-        borderBottom: '1px solid var(--panel-line)',
-        flexShrink: 0,
-      }}>
-        {['CALLSIGN', 'ALT', 'SPD'].map(h => (
-          <span key={h} style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>{h}</span>
-        ))}
-      </div>
-
-      {/* Flight list — grouped by proximity zone */}
-      <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
+      <div
+        style={{
+          flex: '1 1 auto',
+          minHeight: 0,
+          overflowY: 'auto',
+          display: 'grid',
+          alignContent: 'start',
+          gap: 9,
+          paddingRight: 3,
+          scrollbarWidth: 'thin',
+        }}
+      >
         {totalShown === 0 && (
-          <div role="status" aria-live="polite" aria-atomic="true" style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13, textAlign: 'center' }}>
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            style={{
+              ...CHIP_STYLE,
+              padding: 18,
+              color: 'var(--text-dim)',
+              fontSize: 12,
+              textAlign: 'center',
+              background: 'linear-gradient(180deg, rgba(10, 17, 27, 0.26), rgba(10, 17, 27, 0.08))',
+            }}
+          >
             {showNoData ? 'No nearby traffic in range.' : emptyMessage}
           </div>
         )}
 
         {approach.length > 0 && (
-          <>
-            <ZoneHeader label="APPROACH" count={approach.length} color="var(--amber)" sublabel="< 10mi" />
-            {approach.map(f => (
-              <FlightRow key={f.icao24} flight={f} selected={normalizeFlightId(f.icao24) === normalizeFlightId(selectedId)} onSelect={onSelect} />
-            ))}
-          </>
+          <FlightZone
+            label="APPROACH"
+            count={approach.length}
+            color="var(--amber)"
+            sublabel="< 10mi"
+            flights={approach}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
         )}
 
         {terminal.length > 0 && (
-          <>
-            <ZoneHeader label="TERMINAL AREA" count={terminal.length} color="var(--cyan)" sublabel="10 – 30mi" />
-            {terminal.map(f => (
-              <FlightRow key={f.icao24} flight={f} selected={normalizeFlightId(f.icao24) === normalizeFlightId(selectedId)} onSelect={onSelect} />
-            ))}
-          </>
+          <FlightZone
+            label="TERMINAL AREA"
+            count={terminal.length}
+            color="var(--cyan)"
+            sublabel="10 – 30mi"
+            flights={terminal}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
         )}
 
         {enroute.length > 0 && (
-          <>
-            <ZoneHeader
-              label="ENROUTE"
-              count={enrouteSummary}
-              color="rgba(var(--text-soft-rgb), 0.45)"
-              sublabel="> 30mi"
-            />
-            {enroute.map(f => (
-              <FlightRow key={f.icao24} flight={f} selected={normalizeFlightId(f.icao24) === normalizeFlightId(selectedId)} onSelect={onSelect} />
-            ))}
-          </>
+          <FlightZone
+            label="ENROUTE"
+            count={enroute.length}
+            color="rgba(var(--text-soft-rgb), 0.72)"
+            sublabel="> 30mi"
+            flights={enroute}
+            selectedId={selectedId}
+            onSelect={onSelect}
+          />
         )}
+      </div>
+    </div>
+  )
+}
+
+function FlightZone({ label, count, color, sublabel, flights, selectedId, onSelect }) {
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <ZoneHeader label={label} count={count} color={color} sublabel={sublabel} />
+      <div style={{ display: 'grid', gap: 6 }}>
+        {flights.map((flight) => (
+          <FlightRow
+            key={flight.icao24}
+            flight={flight}
+            selected={normalizeFlightId(flight.icao24) === normalizeFlightId(selectedId)}
+            onSelect={onSelect}
+          />
+        ))}
       </div>
     </div>
   )
@@ -273,9 +361,9 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
   const spd = spdValue == null ? '—' : msToKnots(Math.max(0, spdValue))
   const vr = toFiniteNumber(flight.vertical_rate) ?? 0
   const vrIndicator = vr > 1 ? '↑' : vr < -1 ? '↓' : '—'
-  const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? 'var(--red-alt)' : 'var(--text-dim)'
+  const vrColor = vr > 1 ? 'var(--green)' : vr < -1 ? 'var(--amber)' : 'var(--text-dim)'
   const distMi = Math.round(flight.distKm * 0.621)
-  const accentColor = distMi <= 5 ? 'var(--amber)' : distMi <= 20 ? 'var(--cyan)' : 'var(--panel-subtle)'
+  const accentColor = distMi <= 5 ? 'var(--amber)' : distMi <= 20 ? 'var(--cyan)' : 'rgba(var(--text-soft-rgb), 0.42)'
 
   return (
     <button
@@ -285,75 +373,68 @@ const FlightRow = memo(function FlightRow({ flight, selected, onSelect }) {
       aria-pressed={selected}
       style={{
         width: '100%',
-        background: selected ? 'rgba(var(--cyan-alt-rgb), 0.08)' : 'transparent',
-        border: 'none',
+        minHeight: 44,
+        background: selected ? 'rgba(var(--cyan-alt-rgb), 0.12)' : 'rgba(7, 13, 21, 0.2)',
+        border: `1px solid ${selected ? 'rgba(var(--cyan-alt-rgb), 0.32)' : 'rgba(255,255,255,0.06)'}`,
         borderLeft: `2px solid ${selected ? 'var(--cyan-alt)' : accentColor}`,
-        borderBottom: '1px solid var(--panel-line)',
-        padding: '10px 14px 10px 16px',
+        borderRadius: 14,
+        padding: '9px 12px 9px 13px',
         cursor: 'pointer',
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) 60px 64px',
+        gridTemplateColumns: 'minmax(0, 1fr) 54px 58px',
         gap: 0,
         alignItems: 'center',
         textAlign: 'left',
-        transition: 'background 0.18s, transform 0.18s, box-shadow 0.18s',
+        transition: 'background 0.16s, border-color 0.16s, transform 0.16s, box-shadow 0.16s',
         transform: selected ? 'translateX(2px)' : 'none',
-        boxShadow: selected ? 'inset 0 0 0 1px rgba(var(--cyan-alt-rgb), 0.22), 0 0 18px rgba(var(--cyan-alt-rgb), 0.14)' : 'none',
-        animation: selected ? 'selected-glow 0.35s ease' : 'none',
+        boxShadow: selected ? '0 12px 26px rgba(var(--cyan-alt-rgb), 0.14), inset 0 1px 0 rgba(255,255,255,0.05)' : '0 10px 24px rgba(0,0,0,0.12)',
       }}
-      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'rgba(var(--text-soft-rgb), 0.06)' }}
-      onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent' }}
+      onMouseEnter={(event) => {
+        if (!selected) event.currentTarget.style.background = 'rgba(12, 20, 31, 0.34)'
+      }}
+      onMouseLeave={(event) => {
+        if (!selected) event.currentTarget.style.background = 'rgba(7, 13, 21, 0.2)'
+      }}
     >
       <div style={{ minWidth: 0 }}>
-        <div style={{
-          fontSize: 14,
-          color: selected ? 'var(--cyan)' : 'var(--heading)',
-          letterSpacing: 0.1,
-          fontWeight: 600,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: selected ? 'var(--cyan)' : 'var(--heading)',
+            letterSpacing: 0.1,
+            fontWeight: 650,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {fn}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: 'var(--text-dim)',
+            marginTop: 2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {airline ? airline.replace(' Airlines', '').replace(' Airways', '') : flight.origin_country}
-          <span style={{ color: 'rgba(var(--text-soft-rgb), 0.35)', margin: '0 7px' }}>·</span>
-          <span style={{ color: distMi <= 5 ? 'var(--amber)' : 'var(--text-dim)' }}>{distMi}mi</span>
         </div>
       </div>
-      <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>
-        <span>{alt}</span>
-        {alt !== '—' && <span style={{ fontSize: 12, color: 'var(--text-dim)', marginLeft: 2 }}>FL</span>}
+
+      <div style={{ display: 'grid', justifyItems: 'start', gap: 1 }}>
+        <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--heading)' }}>{alt}</span>
+        <span style={{ fontSize: 10, color: vrColor }}>{vrIndicator}</span>
       </div>
-      <div style={{ fontSize: 13 }}>
-        <span style={{ color: vrColor }}>{vrIndicator}</span>
-        <span style={{ color: 'var(--text)', marginLeft: 3 }}>{spd}</span>
+
+      <div style={{ display: 'grid', justifyItems: 'start', gap: 1 }}>
+        <span style={{ fontSize: 12, fontWeight: 650, color: 'var(--heading)' }}>{spd}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>kt</span>
       </div>
     </button>
   )
-}, (prev, next) =>
-  prev.selected === next.selected &&
-  prev.flight.icao24 === next.flight.icao24 &&
-  prev.flight.callsign === next.flight.callsign &&
-  prev.flight.latitude === next.flight.latitude &&
-  prev.flight.longitude === next.flight.longitude &&
-  prev.flight.distKm === next.flight.distKm &&
-  prev.flight.baro_altitude === next.flight.baro_altitude &&
-  prev.flight.geo_altitude === next.flight.geo_altitude &&
-  prev.flight.velocity === next.flight.velocity &&
-  prev.flight.vertical_rate === next.flight.vertical_rate &&
-  prev.onSelect === next.onSelect
-)
+})
 
-const areNearbyListEqual = (prev, next) =>
-  prev.flights === next.flights &&
-  prev.loading === next.loading &&
-  prev.error === next.error &&
-  prev.selectedId === next.selectedId &&
-  prev.width === next.width &&
-  prev.collapsed === next.collapsed &&
-  prev.onSelect === next.onSelect &&
-  prev.onToggleCollapse === next.onToggleCollapse
-
-export default memo(NearbyList, areNearbyListEqual)
+export default memo(NearbyList)

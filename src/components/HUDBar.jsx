@@ -1,14 +1,28 @@
 import { useState, useEffect } from 'react'
 import { weatherCodeToCondition, estimateActiveRunways } from '../api/weather'
 import { headingToCardinal } from '../utils/geo'
-import ApiStatusIndicator from './ApiStatusIndicator'
+
+const HAS_OPENSKY_AUTH = import.meta.env.VITE_OPENSKY_AUTH_ENABLED === 'true'
+const ALL_RUNWAY_IDS = ['04L/22R', '04R/22L', '13L/31R', '13R/31L']
+
+const TILE_SHELL = {
+  minHeight: 66,
+  padding: '10px 13px',
+  borderRadius: 18,
+  background: 'linear-gradient(180deg, rgba(19, 33, 47, 0.92), rgba(9, 15, 24, 0.92))',
+  border: '1px solid rgba(255,255,255,0.08)',
+  boxShadow: '0 16px 32px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.05)',
+  backdropFilter: 'blur(14px)',
+}
 
 function Clock() {
   const [time, setTime] = useState(new Date())
+
   useEffect(() => {
     const id = setInterval(() => setTime(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
+
   const local = time.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -17,195 +31,280 @@ function Clock() {
     timeZone: 'America/New_York',
     timeZoneName: 'short',
   })
+
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-      <span style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 600 }}>
-        {local}
-      </span>
-    </div>
+    <span
+      style={{
+        width: '100%',
+        minWidth: 0,
+        textAlign: 'center',
+        fontSize: 14,
+        fontWeight: 650,
+        letterSpacing: '0.045em',
+        fontVariantNumeric: 'tabular-nums',
+        fontFeatureSettings: '"tnum" 1, "ss01" 1',
+        color: 'var(--heading)',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
+      {local}
+    </span>
   )
 }
 
-function DataSourceBadge({ dataSource }) {
-  const type = dataSource?.type
-  const isCached = type === 'cache'
-  const isFallback = type === 'fallback'
-  const cachedAtMs = dataSource?.cachedAt ? dataSource.cachedAt.getTime() : null
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  const sourceLabel = isFallback
-    ? `FALLBACK: ${(dataSource?.source || 'fallback feed').toUpperCase()}`
-    : 'DB CACHE'
-
-  useEffect(() => {
-    if (!(isCached && cachedAtMs)) return
-    const update = () => setNowMs(Date.now())
-    update()
-    const id = setInterval(update, 30000)
-    return () => clearInterval(id)
-  }, [cachedAtMs, isCached])
-
-  if (!dataSource || type === 'live') return null
-
-  const ago = cachedAtMs ? Math.round((nowMs - cachedAtMs) / 60000) : null
-  const label = isCached
-    ? `DB CACHE · ${ago !== null ? `${ago < 1 ? '<1' : ago}m ago` : 'unavailable'}`
-    : sourceLabel
-
-  const accent = isFallback
-    ? 'var(--cyan-alt)'
-    : 'var(--amber)'
-  const border = isFallback
-    ? 'rgba(var(--cyan-alt-rgb), 0.45)'
-    : 'rgba(var(--amber-rgb), 0.38)'
+function CenterBadgeLogo() {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 6,
-      background: isFallback ? 'rgba(var(--cyan-alt-rgb), 0.08)' : 'rgba(var(--amber-rgb), 0.09)',
-      border: `1px solid ${border}`,
-      borderRadius: 999,
-      padding: '3px 9px',
-      marginRight: 8,
-      fontSize: 12,
-      color: accent,
-      fontWeight: 600,
-    }}>
-      <span style={{ fontSize: 9, opacity: 0.7 }}>⬡</span>
-      <span>{label}</span>
-    </div>
+    <svg width="78" height="58" viewBox="0 0 78 58" aria-hidden="true">
+      <defs>
+        <linearGradient id="twa-glow" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.96)" />
+          <stop offset="100%" stopColor="rgba(196,232,244,0.94)" />
+        </linearGradient>
+      </defs>
+      <circle cx="39" cy="29" r="26.5" fill="rgba(0,195,255,0.08)" stroke="rgba(0,195,255,0.22)" />
+      <path d="M15 17h48" stroke="rgba(0,195,255,0.18)" strokeWidth="1.4" strokeLinecap="round" />
+      <text
+        x="39"
+        y="31"
+        textAnchor="middle"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontWeight="700"
+        fontSize="22"
+        letterSpacing="5"
+        fill="url(#twa-glow)"
+      >
+        TWA
+      </text>
+      <text
+        x="39"
+        y="42.5"
+        textAnchor="middle"
+        fontFamily="JetBrains Mono, monospace"
+        fontWeight="600"
+        fontSize="6.6"
+        letterSpacing="3.1"
+        fill="rgba(0,195,255,0.84)"
+      >
+        FLIGHT DESK
+      </text>
+    </svg>
   )
 }
 
-function ModeControls({
-  viewMode,
-  historyWindows,
-  onViewModeChange,
-  historyWindowMs,
-  onHistoryWindowChange,
-  timelapseSpeed,
-  onTimelapseSpeedChange,
-  timelapsePlaying,
-  onTimelapsePlayingChange,
-  hasHistoryData,
+function HUDTile({
+  label,
+  accent = 'var(--heading)',
+  detail,
+  wide = false,
+  center = false,
+  narrow = false,
+  value,
+  children,
 }) {
-  const canUseWindow = viewMode !== 'live'
-  const canControlTimelapse = viewMode === 'timelapse' && hasHistoryData
-
   return (
-    <div style={{
-      display: 'flex',
-      gap: 10,
-      alignItems: 'center',
-      fontSize: 11,
-      color: 'var(--text-dim)',
-      paddingTop: 2,
-      flexWrap: 'wrap',
-    }}>
-      <select
-        value={viewMode}
-        aria-label="Select flight map mode"
-        onChange={e => onViewModeChange(e.target.value)}
+    <div
+      style={{
+        ...TILE_SHELL,
+        minWidth: narrow ? 116 : wide ? 206 : 124,
+        display: 'grid',
+        alignContent: 'space-between',
+        gap: 7,
+        justifyItems: center ? 'center' : 'stretch',
+      }}
+    >
+      <div
         style={{
-          borderRadius: 5,
-          border: '1px solid var(--panel-border)',
-          background: 'var(--panel-strong)',
-          color: 'var(--heading)',
-          padding: '5px 7px',
-          fontSize: 11,
-          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: center ? 'center' : 'space-between',
+          gap: 9,
+          minWidth: 0,
         }}
       >
-        <option value="live">Live</option>
-        <option value="history">History</option>
-        <option value="timelapse">Timelapse</option>
-      </select>
-
-      <select
-        value={historyWindowMs}
-        aria-label="Select flight history window"
-        disabled={!canUseWindow}
-        onChange={e => onHistoryWindowChange(Number(e.target.value))}
-        style={{
-          borderRadius: 5,
-          border: '1px solid var(--panel-border)',
-          background: canUseWindow ? 'var(--panel-strong)' : 'transparent',
-          color: canUseWindow ? 'var(--heading)' : 'var(--text-dim)',
-          padding: '5px 7px',
-          fontSize: 11,
-        }}
-      >
-        {historyWindows.map(window => (
-          <option key={window.ms} value={window.ms}>{window.label}</option>
-        ))}
-      </select>
-
-      <select
-        value={timelapseSpeed}
-        aria-label="Select timelapse speed"
-        disabled={viewMode !== 'timelapse' || !hasHistoryData}
-        onChange={e => onTimelapseSpeedChange(Number(e.target.value))}
-        style={{
-          borderRadius: 5,
-          border: '1px solid var(--panel-border)',
-          background: hasHistoryData ? 'var(--panel-strong)' : 'transparent',
-          color: hasHistoryData ? 'var(--heading)' : 'var(--text-dim)',
-          padding: '5px 7px',
-          fontSize: 11,
-        }}
-      >
-        {[2, 3, 4].map(speed => (
-          <option key={speed} value={speed}>{`${speed}x`}</option>
-        ))}
-      </select>
-
-      <button
-        type="button"
-        onClick={() => onTimelapsePlayingChange(!timelapsePlaying)}
-        disabled={!canControlTimelapse}
-        aria-label={canControlTimelapse
-          ? (timelapsePlaying ? 'Pause timelapse replay' : 'Play timelapse replay')
-          : 'Timelapse disabled until history loads'}
-        style={{
-          borderRadius: 5,
-          border: '1px solid var(--panel-border)',
-          background: 'var(--panel-strong)',
-          color: canControlTimelapse && timelapsePlaying ? 'var(--green)' : 'var(--text)',
-          fontSize: 11,
-          fontWeight: 600,
-          padding: '5px 7px',
-          whiteSpace: 'nowrap',
-          opacity: canControlTimelapse ? 1 : 0.5,
-        }}
-      >
-        {canControlTimelapse ? (timelapsePlaying ? '⏸ Pause' : '▶ Play') : '▶ Play'}
-      </button>
-
+        <span
+          style={{
+            fontSize: 10,
+            color: 'var(--text-dim)',
+            letterSpacing: 1.35,
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+        </span>
+        {!center && (
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: accent,
+              boxShadow: `0 0 12px ${accent}`,
+              flex: '0 0 auto',
+            }}
+          />
+        )}
+      </div>
+      {children || (
+        <div style={{ display: 'grid', gap: 3, justifyItems: center ? 'center' : 'start', minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 14,
+              lineHeight: 1.15,
+              fontWeight: 650,
+              color: accent,
+              minWidth: 0,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {value}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              lineHeight: 1.2,
+              color: 'rgba(var(--text-soft-rgb), 0.9)',
+              minWidth: 0,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {detail || ' '}
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function WindTile({ direction, cardinal, speed, gust }) {
+  const gustSpread = Number.isFinite(gust) && Number.isFinite(speed) ? Math.max(0, gust - speed) : null
+  const directionLabel = Number.isFinite(direction) ? `${cardinal} ${direction}°` : '—'
+  const flowLabel = gustSpread && gustSpread >= 6 ? `gust +${gustSpread} mph` : 'steady flow'
+
+  return (
+    <HUDTile label="Wind" accent="var(--cyan-alt)" wide>
+      <div style={{ display: 'grid', gridTemplateColumns: '38px minmax(0, 1fr)', gap: 10, alignItems: 'center' }}>
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            border: '1px solid rgba(var(--cyan-alt-rgb), 0.26)',
+            background: 'radial-gradient(circle, rgba(var(--cyan-alt-rgb), 0.2), rgba(255,255,255,0.02) 68%)',
+            display: 'grid',
+            placeItems: 'center',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+          }}
+        >
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderLeft: '7px solid transparent',
+              borderRight: '7px solid transparent',
+              borderBottom: '14px solid rgba(var(--cyan-alt-rgb), 0.98)',
+              transform: `rotate(${Number.isFinite(direction) ? direction : 0}deg)`,
+              transition: 'transform 320ms ease-out',
+              filter: 'drop-shadow(0 0 7px rgba(0,195,255,0.24))',
+            }}
+          />
+        </div>
+        <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 650, color: 'var(--cyan-alt)', whiteSpace: 'nowrap' }}>
+            {Number.isFinite(speed) ? `${speed} mph` : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(var(--text-soft-rgb), 0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {directionLabel} · {flowLabel}
+          </div>
+        </div>
+      </div>
+    </HUDTile>
+  )
+}
+
+function RunwayTile({ activeRunways, selectedRunwayId, onRunwaySelect }) {
+  const activeSet = new Set((activeRunways || []).map(runway => String(runway).trim().toUpperCase()))
+  const selected = String(selectedRunwayId || '').trim().toUpperCase()
+
+  return (
+    <HUDTile label="Runways" accent="var(--amber)">
+      <div style={{ display: 'grid', gap: 7 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+          {ALL_RUNWAY_IDS.map((runwayId) => {
+            const isActive = activeSet.has(runwayId)
+            const isSelected = selected === runwayId
+            return (
+              <button
+                key={runwayId}
+                type="button"
+                onClick={() => onRunwaySelect?.({
+                  runwayId,
+                  runwayLabel: runwayId,
+                  flightId: null,
+                  flightLabel: null,
+                })}
+                style={{
+                  minHeight: 24,
+                  padding: '0 8px',
+                  borderRadius: 9,
+                  border: `1px solid ${isSelected ? 'rgba(var(--cyan-alt-rgb), 0.42)' : isActive ? 'rgba(var(--amber-rgb), 0.3)' : 'rgba(255,255,255,0.07)'}`,
+                  background: isSelected
+                    ? 'rgba(var(--cyan-alt-rgb), 0.14)'
+                    : isActive
+                      ? 'rgba(var(--amber-rgb), 0.12)'
+                      : 'rgba(255,255,255,0.03)',
+                  color: isSelected ? 'var(--cyan-alt)' : isActive ? 'var(--amber)' : 'var(--text-soft)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {runwayId}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </HUDTile>
+  )
+}
+
+function resolveConditionLabel(condition) {
+  if (!condition) return '—'
+  if (typeof condition === 'string') return condition
+  return condition.label || condition.text || '—'
+}
+
+function formatHudTime(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/New_York',
+  })
 }
 
 export default function HUDBar({
   flights,
   weather,
   rateLimitStatus,
-  backoffUntil,
   lastUpdated,
   isStale,
   dataSource,
   isConstrained,
-  viewMode = 'live',
-  historyWindows = [{ label: 'Last day', ms: 24 * 60 * 60 * 1000 }],
-  onViewModeChange = () => {},
-  historyWindowMs = historyWindows[0]?.ms ?? 24 * 60 * 60 * 1000,
-  onHistoryWindowChange = () => {},
-  timelapseSpeed = 2,
-  onTimelapseSpeedChange = () => {},
-  timelapsePlaying = true,
-  onTimelapsePlayingChange = () => {},
-  hasHistoryData = false,
+  selectedRunwayId,
+  onRunwaySelect,
 }) {
   const condition = weather ? weatherCodeToCondition(weather.weather_code) : null
+  const conditionLabel = resolveConditionLabel(condition)
   const windDir = weather ? Math.round(weather.wind_direction_10m) : null
   const windSpd = weather ? Math.round(weather.wind_speed_10m) : null
   const windGust = weather ? Math.round(weather.wind_gusts_10m) : null
@@ -214,9 +313,29 @@ export default function HUDBar({
   const runways = weather ? estimateActiveRunways(windDir) : []
   const airborne = flights.length
   const blocked = rateLimitStatus === 'blocked'
+  const authConfigured = dataSource?.authConfigured ?? HAS_OPENSKY_AUTH
+  const isSnapshotSource = dataSource?.type === 'cache' && dataSource?.cacheSource === 'snapshot'
   const isFallbackSource = dataSource?.type === 'fallback'
   const isCacheSource = dataSource?.type === 'cache'
-  const feedLabel = blocked ? 'HOLD' : isFallbackSource ? 'FALLBACK' : isCacheSource ? 'CACHE' : 'LIVE'
+  const feedContextLabel = blocked
+    ? 'retry window active'
+    : isFallbackSource
+      ? 'backup feed online'
+      : isCacheSource
+        ? (dataSource?.cacheSource === 'snapshot' ? 'snapshot cache' : 'local cache ready')
+        : `${airborne} tracked`
+  const weatherSummary = weather
+    ? (windGust > windSpd + 5 ? `gusting ${windGust} mph` : 'stable')
+    : 'weather offline'
+  const feedLabel = blocked
+    ? 'RATE HOLD'
+    : isFallbackSource
+      ? 'BACKUP'
+      : isSnapshotSource
+        ? 'SNAPSHOT'
+        : isCacheSource
+          ? 'CACHE'
+          : 'LIVE'
   const feedDot = blocked
     ? 'var(--red)'
     : isFallbackSource
@@ -224,90 +343,83 @@ export default function HUDBar({
       : isCacheSource
         ? 'var(--amber)'
         : 'var(--green)'
-
+  const updatedLabel = formatHudTime(lastUpdated)
   return (
-    <div className="hudbar">
-      <div className="hudbar-main">
-        <div className="hudbar-logo">
-          <img src="/twa-logo.png" alt="TWA Hotel" height={34} style={{ display: 'block' }} />
-          <div style={{ lineHeight: 1.1 }}>
-            <div style={{ fontSize: 13, color: 'var(--heading)', fontWeight: 700 }}>TWA Flight Deck</div>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>KJFK · Hotel Ops</div>
+    <div
+      className="hudbar"
+      style={{
+        background: 'radial-gradient(circle at top center, rgba(var(--cyan-rgb), 0.14), rgba(8, 12, 20, 0.96) 56%), linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 18px 48px rgba(0,0,0,0.28)',
+      }}
+    >
+      <div
+        className="hudbar-main"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+          alignItems: 'center',
+          gap: 14,
+        }}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '114px minmax(0, 1fr) 154px', gap: 10, minWidth: 0 }}>
+          <HUDTile label="Feed" accent={feedDot} narrow value={feedLabel} detail={feedContextLabel} />
+          <RunwayTile activeRunways={runways} selectedRunwayId={selectedRunwayId} onRunwaySelect={onRunwaySelect} />
+          <HUDTile label="Local time" accent="var(--cyan)" center>
+            <div style={{ display: 'grid', gap: 4, justifyItems: 'center', width: '100%', minWidth: 0 }}>
+              <Clock />
+              <div style={{ fontSize: 11, color: 'rgba(var(--text-soft-rgb), 0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                JFK tower clock
+              </div>
+            </div>
+          </HUDTile>
+        </div>
+
+        <div
+          style={{
+            ...TILE_SHELL,
+            minWidth: 224,
+            minHeight: 84,
+            padding: '7px 17px',
+            display: 'grid',
+            placeItems: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+            background: 'radial-gradient(circle at 50% 18%, rgba(var(--cyan-alt-rgb), 0.22), rgba(18, 33, 47, 0.96) 44%, rgba(9, 15, 24, 0.96) 100%)',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 10,
+              borderRadius: 16,
+              border: '1px solid rgba(var(--cyan-alt-rgb), 0.16)',
+              pointerEvents: 'none',
+            }}
+          />
+          <div
+            style={{
+              width: 92,
+              height: 92,
+              borderRadius: '50%',
+              border: '1px solid rgba(var(--cyan-alt-rgb), 0.24)',
+              background: 'radial-gradient(circle, rgba(var(--cyan-alt-rgb), 0.26), rgba(255,255,255,0.03) 62%, rgba(255,255,255,0) 74%)',
+              display: 'grid',
+              placeItems: 'center',
+              boxShadow: '0 0 24px rgba(var(--cyan-alt-rgb), 0.14), inset 0 1px 0 rgba(255,255,255,0.08)',
+            }}
+          >
+            <CenterBadgeLogo />
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: feedDot,
-            animation: 'pulse-dot 1.4s ease-in-out infinite',
-            boxShadow: `0 0 8px ${feedDot}`,
-          }} />
-          <span style={{ fontSize: 12, color: feedDot, fontWeight: 600 }}>
-            {feedLabel}
-          </span>
-        </div>
-
-        <DataSourceBadge dataSource={dataSource} />
-        <ApiStatusIndicator
-          status={rateLimitStatus || 'ok'}
-          backoffUntil={backoffUntil}
-          lastUpdated={lastUpdated}
-          isStale={isStale}
-        />
-
-        <div className="hudbar-stats">
-          <HUDStat label="Aircraft" value={airborne || '—'} />
-          {weather && <HUDStat label="Wind" value={`${cardinal} ${windSpd} mph`} />}
-          {weather && windGust > windSpd + 5 && <HUDStat label="Gust" value={`${windGust} mph`} color="var(--amber)" />}
-          {weather && <HUDStat label="Temp" value={`${temp}°F`} />}
-          {weather && condition && <HUDStat label="Sky" value={condition} />}
-          {weather && runways.length > 0 && <HUDStat label="Runways" value={runways.join(' · ')} color="var(--amber)" />}
-        </div>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {isConstrained && (
-            <div style={{
-              border: '1px solid rgba(var(--cyan-rgb), 0.35)',
-              color: 'var(--cyan)',
-              borderRadius: 999,
-              padding: '3px 9px',
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 0.3,
-            }}>
-              AUTO MODE
-            </div>
-          )}
-          <Clock />
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(188px, 1.42fr) repeat(3, minmax(96px, 1fr))', gap: 10, minWidth: 0 }}>
+          <WindTile direction={windDir} cardinal={cardinal} speed={windSpd} gust={windGust} />
+          <HUDTile label="Temp" accent="var(--cyan-alt)" value={temp != null ? `${temp}°F` : '—'} detail={weather ? 'ramp surface' : 'pending'} />
+          <HUDTile label="Sky" accent="var(--heading)" value={conditionLabel} detail={weather ? 'live weather code' : 'pending'} />
+          <HUDTile label="Weather" accent="var(--text-soft)" value={weatherSummary} detail={updatedLabel ? `MET ${updatedLabel}` : 'awaiting met'} />
         </div>
       </div>
-
-      <div className="hudbar-controls">
-        <ModeControls
-          viewMode={viewMode}
-          historyWindows={historyWindows}
-          onViewModeChange={onViewModeChange}
-          historyWindowMs={historyWindowMs}
-          onHistoryWindowChange={onHistoryWindowChange}
-          timelapseSpeed={timelapseSpeed}
-          onTimelapseSpeedChange={onTimelapseSpeedChange}
-          timelapsePlaying={timelapsePlaying}
-          onTimelapsePlayingChange={onTimelapsePlayingChange}
-          hasHistoryData={hasHistoryData}
-        />
-      </div>
-    </div>
-  )
-}
-
-function HUDStat({ label, value, color = 'var(--heading)' }) {
-  return (
-    <div style={{ display: 'grid', gap: 2 }}>
-      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{label}</span>
-      <span style={{ fontSize: 13, color, fontWeight: 600, whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   )
 }

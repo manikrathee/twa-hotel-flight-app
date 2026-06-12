@@ -11,18 +11,18 @@ import useDeviceLocation from './hooks/useDeviceLocation'
 import { INITIAL_VIEW } from './components/flightMapConfig'
 import { JFK, MAP_RADIUS_MI } from './config/airspace'
 
-const LIST_PANEL_MIN = 320
-const LIST_PANEL_MAX = 560
-const DETAIL_PANEL_MIN = 420
-const DETAIL_PANEL_MAX = 760
+const LIST_PANEL_MIN = 232
+const LIST_PANEL_MAX = 396
+const DETAIL_PANEL_MIN = 350
+const DETAIL_PANEL_MAX = 690
 const PANEL_COLLAPSED_WIDTH = 50
-const LIST_PANEL_MIN_RESPONSIVE = 220
-const DETAIL_PANEL_MIN_RESPONSIVE = 260
+const LIST_PANEL_MIN_RESPONSIVE = 208
+const DETAIL_PANEL_MIN_RESPONSIVE = 220
 const AUTO_COLLAPSE_LIST_AT = 1040
 const AUTO_COLLAPSE_DETAIL_AT = 680
-const VIEWPORT_LIST_RATIO = { normal: 0.30, constrained: 0.24 }
-const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.22, constrained: 0.18 }
-const VIEWPORT_DETAIL_RATIO = { normal: 0.41, constrained: 0.36 }
+const VIEWPORT_LIST_RATIO = { normal: 0.21, constrained: 0.18 }
+const VIEWPORT_LIST_RATIO_WITH_DETAILS = { normal: 0.175, constrained: 0.15 }
+const VIEWPORT_DETAIL_RATIO = { normal: 0.36, constrained: 0.31 }
 
 const MODE_LIVE = 'live'
 const MODE_TIMELAPSE = 'timelapse'
@@ -35,6 +35,7 @@ const HISTORY_WINDOWS = [
 ]
 
 const TIMELAPSE_SPEEDS = [2, 3, 4]
+const HAS_OPENSKY_AUTH = import.meta.env.VITE_OPENSKY_AUTH_ENABLED === 'true'
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v))
@@ -114,8 +115,11 @@ export default function App() {
     : null
   const selectedHistoryFlight = selectedId ? (history.latestByIcao?.get(selectedId) ?? null) : null
 
+  const searchCenterLat = searchCenter?.lat
+  const searchCenterLon = searchCenter?.lon
+
   const mapInitialView = useMemo(() => {
-    if (!searchCenter) return INITIAL_VIEW
+    if (!Number.isFinite(searchCenterLat) || !Number.isFinite(searchCenterLon)) return INITIAL_VIEW
     const zoom = searchRadiusMi > 80
       ? 9.4
       : searchRadiusMi > 35
@@ -126,12 +130,12 @@ export default function App() {
 
     return {
       ...INITIAL_VIEW,
-      center: [searchCenter.lon, searchCenter.lat],
+      center: [searchCenterLon, searchCenterLat],
       zoom,
       bearing: 0,
       pitch: 52,
     }
-  }, [searchCenter?.lat, searchCenter?.lon, searchRadiusMi])
+  }, [searchCenterLat, searchCenterLon, searchRadiusMi])
   const selectedFlightForMap = useMemo(() => {
     if (!selectedId) return null
     return activeFlights.find(f => String(f.icao24 || '').toLowerCase() === selectedId) || null
@@ -162,8 +166,14 @@ export default function App() {
   const detailConnectionLabel = dataSource?.type === 'fallback'
     ? getFallbackFeedLabel()
     : dataSource?.type === 'cache'
-      ? (dataSource?.cacheSource === 'mock' ? 'Simulated traffic cache' : 'Local DB cache')
-      : 'OpenSky Network'
+      ? (dataSource?.cacheSource === 'mock'
+        ? 'Simulated traffic cache'
+        : dataSource?.cacheSource === 'snapshot'
+          ? 'Local snapshot cache'
+          : 'Local DB cache')
+      : (dataSource?.authConfigured ?? HAS_OPENSKY_AUTH) === false
+        ? 'OpenSky anonymous quota'
+        : 'OpenSky Network'
   const historyTimeline = isHistoryMode ? {
     mode: viewMode,
     speed: timelapseSpeed,
@@ -265,16 +275,23 @@ export default function App() {
   }, [])
 
   const handleRunwaySelection = useCallback((payload) => {
-    if (!payload?.flightId) {
+    const runwayId = payload?.runwayId ?? payload?.runwayLabel ?? null
+    const runwayLabel = payload?.runwayLabel ?? payload?.runwayId ?? runwayId
+
+    if (!runwayId) {
       setRunwayAlert(null)
       return
     }
 
+    setSelectedId(null)
+    setSelectedSource(MODE_LIVE)
+    setTrack(null)
+
     setRunwayAlert({
-      runwayId: payload.runwayId ?? payload.runwayLabel ?? 'Runway',
-      runwayLabel: payload.runwayLabel ?? payload.runwayId ?? 'Runway',
-      flightId: payload.flightId,
-      flightLabel: payload.flightLabel || payload.flightId,
+      runwayId,
+      runwayLabel,
+      flightId: payload?.flightId ? normalizeFlightId(payload.flightId) : null,
+      flightLabel: payload?.flightLabel || payload?.flightId || null,
     })
   }, [])
 
@@ -337,7 +354,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onGlobalKeyDown)
   }, [effectiveSelectedId, handleClose])
 
-  if (error && flights.length === 0 && !isHistoryMode) {
+  if (error && flights.length === 0 && !isHistoryMode && dataSource?.type !== 'cache') {
     return (
       <div className="app">
         <HUDBar
@@ -349,6 +366,8 @@ export default function App() {
           isStale={isStale}
           dataSource={dataSource}
           isConstrained={constrainedMode}
+          selectedRunwayId={runwayAlert?.runwayId ?? null}
+          onRunwaySelect={handleRunwaySelection}
           viewMode={viewMode}
           historyWindows={HISTORY_WINDOWS}
           onViewModeChange={onViewModeChange}
@@ -374,10 +393,10 @@ export default function App() {
             <span style={{ fontSize: 24, color: 'var(--red)' }}>⚠</span>
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--heading)', letterSpacing: 0.2 }}>
-            NO ADS-B FEED
+            LIVE FEED HOLD
           </div>
           <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1 }}>
-            ADS-B FEED UNAVAILABLE
+            Traffic data temporarily unavailable
           </div>
           <div role="alert" style={{ fontSize: 13, color: 'var(--red-dim)', letterSpacing: 0.1, textAlign: 'center' }}>
             {error}
@@ -401,6 +420,8 @@ export default function App() {
         isStale={isStale}
         dataSource={dataSource}
         isConstrained={constrainedMode}
+        selectedRunwayId={runwayAlert?.runwayId ?? null}
+        onRunwaySelect={handleRunwaySelection}
         viewMode={viewMode}
         historyWindows={HISTORY_WINDOWS}
         onViewModeChange={onViewModeChange}
@@ -429,6 +450,7 @@ export default function App() {
           <FlightMap
             flights={activeFlights}
             selectedFlight={selectedFlight}
+            selectedRunwayId={runwayAlert?.runwayId ?? null}
             onSelect={isHistoryMode ? handleHistorySelect : handleSelect}
             onHistorySelect={isHistoryMode ? handleHistorySelect : null}
             onRunwaySelect={handleRunwaySelection}

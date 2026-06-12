@@ -3,8 +3,15 @@ const DB_VERSION = 1
 const STORE_POINTS = 'flight_points'
 
 const MAX_HISTORY_MS = 10 * 24 * 60 * 60 * 1000 // keep 10 days
+const SAMPLE_WRITE_MIN_INTERVAL_MS = 12_000
+const SAMPLE_WRITE_MAX_INTERVAL_MS = 45_000
+const SAMPLE_POSITION_EPSILON_DEG = 0.00018
+const SAMPLE_ALTITUDE_EPSILON_M = 45
+const SAMPLE_SPEED_EPSILON_MS = 8
+const SAMPLE_HEADING_EPSILON_DEG = 6
 
 let dbPromise = null
+const recentSampleMeta = new Map()
 
 function requestToPromise(req) {
   return new Promise((resolve, reject) => {
@@ -44,7 +51,7 @@ function normalizeSamplePoint(raw, snapshotTime) {
     time_position: isNumberLike(raw.time_position) ? Number(raw.time_position) : null,
     origin_country: raw.origin_country || null,
     distKm: isNumberLike(raw.distKm) ? Number(raw.distKm) : null,
-    sampleKind: 'snapshot',
+    sampleKind: String(raw.sampleKind || 'snapshot'),
   }
 }
 
@@ -83,6 +90,40 @@ function normalizeTrackPoints(icao24, track) {
 
 function isValidSample(sample) {
   return sample?.icao24 && isNumberLike(sample.ts) && isNumberLike(sample.latitude) && isNumberLike(sample.longitude)
+}
+
+function headingDelta(a, b) {
+  if (!isNumberLike(a) || !isNumberLike(b)) return Infinity
+  return Math.abs((((a - b) + 540) % 360) - 180)
+}
+
+function shouldPersistSample(sample) {
+  const previous = recentSampleMeta.get(sample.icao24)
+  if (!previous) return true
+
+  const elapsedMs = sample.ts - previous.ts
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return false
+  if (sample.sampleKind === 'recovered' || previous.sampleKind === 'recovered') return true
+  if (sample.on_ground !== previous.on_ground) return true
+  if (elapsedMs >= SAMPLE_WRITE_MAX_INTERVAL_MS) return true
+
+  const moved = Math.abs(sample.latitude - previous.latitude) > SAMPLE_POSITION_EPSILON_DEG
+    || Math.abs(sample.longitude - previous.longitude) > SAMPLE_POSITION_EPSILON_DEG
+  if (moved) return true
+
+  const altitudeChanged = isNumberLike(sample.baro_altitude) && isNumberLike(previous.baro_altitude)
+    ? Math.abs(sample.baro_altitude - previous.baro_altitude) > SAMPLE_ALTITUDE_EPSILON_M
+    : sample.baro_altitude !== previous.baro_altitude
+  if (altitudeChanged) return true
+
+  const speedChanged = isNumberLike(sample.velocity) && isNumberLike(previous.velocity)
+    ? Math.abs(sample.velocity - previous.velocity) > SAMPLE_SPEED_EPSILON_MS
+    : sample.velocity !== previous.velocity
+  if (speedChanged) return true
+
+  if (headingDelta(sample.heading, previous.heading) > SAMPLE_HEADING_EPSILON_DEG) return true
+
+  return elapsedMs >= SAMPLE_WRITE_MIN_INTERVAL_MS
 }
 
 function openDB() {
@@ -137,12 +178,14 @@ export async function recordFlightSamples(flights, snapshotTime = Date.now()) {
   const points = flights
     .map(f => normalizeSamplePoint(f, snapshotTime))
     .filter(isValidSample)
+    .filter(shouldPersistSample)
 
   if (!points.length) return
 
   await withStore('readwrite', (store) => {
     for (const point of points) {
       store.add(point)
+      recentSampleMeta.set(point.icao24, point)
     }
   })
 
@@ -156,6 +199,7 @@ export async function recordTrackPoints(icao24, track) {
   await withStore('readwrite', (store) => {
     for (const point of points) {
       store.add(point)
+      recentSampleMeta.set(point.icao24, point)
     }
   })
 }

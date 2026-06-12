@@ -1,4 +1,4 @@
-import { AIRCRAFT_FACTS, AIRLINE_FACTS } from '../data/aviationFacts'
+import { AIRCRAFT_FACTS, AIRLINE_FACTS } from '../data/aviationFacts.js'
 
 // ICAO airline prefix → airline name
 const AIRLINE_LOOKUP = {
@@ -72,6 +72,19 @@ export function getAircraftCategory(typeCode) {
   if (REGIONAL_JET.has(t)) return 'regional'
   if (TURBOPROP.has(t)) return 'turboprop'
   return 'narrowbody' // sensible default for commercial
+}
+
+export function isKnownAircraftTypeCode(typeCode) {
+  if (!typeCode) return false
+  const normalizedType = String(typeCode).toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (!normalizedType) return false
+  return (
+    QUAD_JET.has(normalizedType) ||
+    WIDE_BODY_TWIN.has(normalizedType) ||
+    NARROW_BODY.has(normalizedType) ||
+    REGIONAL_JET.has(normalizedType) ||
+    TURBOPROP.has(normalizedType)
+  )
 }
 
 export function getAirlineName(callsign) {

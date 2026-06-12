@@ -3,7 +3,7 @@ import { JFK_AIRSPACE_BBOX } from '../config/airspace'
 const FEED_CONFIG = {
   url: (import.meta.env.VITE_FALLBACK_FEED_URL || '').trim(),
   provider: (import.meta.env.VITE_FALLBACK_FEED_PROVIDER || 'generic').trim().toLowerCase(),
-  label: (import.meta.env.VITE_FALLBACK_FEED_LABEL || 'KJFK FALLBACK').trim(),
+  label: (import.meta.env.VITE_FALLBACK_FEED_LABEL || 'BACKUP FEED').trim(),
   timeoutMs: Number(import.meta.env.VITE_FALLBACK_FEED_TIMEOUT_MS || 14_000),
   fallbackToPrimaryIntervalMs: Number(import.meta.env.VITE_FALLBACK_PRIMARY_RETRY_MS || 45_000),
 }
@@ -273,7 +273,7 @@ function applyBBoxQuery(url, provider, bounds = FALLBACK_BBOX) {
   }
 
   if (provider === 'fr24') {
-    target.searchParams.set('bounds', `${BBOX.lamin},${BBOX.lomin},${BBOX.lamax},${BBOX.lomax}`)
+    target.searchParams.set('bounds', `${lamin},${lomin},${lamax},${lomax}`)
     if (!target.searchParams.has('faa')) target.searchParams.set('faa', '1')
     if (!target.searchParams.has('mlat')) target.searchParams.set('mlat', '1')
     if (!target.searchParams.has('adsb')) target.searchParams.set('adsb', '1')
@@ -282,10 +282,10 @@ function applyBBoxQuery(url, provider, bounds = FALLBACK_BBOX) {
     return target
   }
 
-  target.searchParams.set('lamin', String(BBOX.lamin))
-  target.searchParams.set('lomin', String(BBOX.lomin))
-  target.searchParams.set('lamax', String(BBOX.lamax))
-  target.searchParams.set('lomax', String(BBOX.lomax))
+  target.searchParams.set('lamin', String(lamin))
+  target.searchParams.set('lomin', String(lomin))
+  target.searchParams.set('lamax', String(lamax))
+  target.searchParams.set('lomax', String(lomax))
   return target
 }
 

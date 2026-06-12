@@ -21,6 +21,7 @@ const CACHE_PATH = join(ROOT, 'public', 'flights-cache.json')
 const ENV_PATH   = join(ROOT, '.env.local')
 
 mkdirSync(join(ROOT, 'data'), { recursive: true })
+mkdirSync(join(ROOT, 'public'), { recursive: true })
 
 const BBOX = JFK_AIRSPACE_BBOX
 const TOKEN_URL  = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
@@ -38,8 +39,14 @@ function loadEnv(path) {
 }
 
 const env = loadEnv(ENV_PATH)
-const CLIENT_ID     = process.env.VITE_OPENSKY_CLIENT_ID     ?? env.VITE_OPENSKY_CLIENT_ID
-const CLIENT_SECRET = process.env.VITE_OPENSKY_CLIENT_SECRET ?? env.VITE_OPENSKY_CLIENT_SECRET
+const CLIENT_ID = process.env.OPENSKY_CLIENT_ID
+  ?? process.env.VITE_OPENSKY_CLIENT_ID
+  ?? env.OPENSKY_CLIENT_ID
+  ?? env.VITE_OPENSKY_CLIENT_ID
+const CLIENT_SECRET = process.env.OPENSKY_CLIENT_SECRET
+  ?? process.env.VITE_OPENSKY_CLIENT_SECRET
+  ?? env.OPENSKY_CLIENT_SECRET
+  ?? env.VITE_OPENSKY_CLIENT_SECRET
 
 // DB setup
 const db = new Database(DB_PATH)

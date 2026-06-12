@@ -3,6 +3,8 @@ import { getAccessToken, invalidateToken } from './openskyAuth'
 import { JFK_AIRSPACE_BBOX } from '../config/airspace'
 
 const DEMO_FLIGHTS = []
+const FEED_RATE_LIMIT_BUCKET = 'feed'
+const DETAIL_RATE_LIMIT_BUCKET = 'detail'
 
 const BASE = '/api/opensky'
 const CACHED_FLIGHT_FILE_TTL_MS = 60 * 1000
@@ -39,25 +41,35 @@ function isFlightFileFresh() {
   return cachedFlightFile && (Date.now() - flightCacheAtMs) <= CACHED_FLIGHT_FILE_TTL_MS
 }
 
+function normalizeText(value) {
+  return String(value ?? '').trim()
+}
+
+function normalizeNumber(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
 function parseStates(states) {
   if (!Array.isArray(states)) return []
   return states.map(s => ({
-    icao24:         s[0],
-    callsign:      (s[1] || '').trim(),
-    origin_country: s[2],
-    time_position:  s[3],
-    last_contact:   s[4],
-    longitude:      s[5],
-    latitude:       s[6],
-    baro_altitude:  s[7],
-    on_ground:      s[8],
-    velocity:       s[9],        // m/s
-    heading:        s[10],        // degrees from north
-    vertical_rate:  s[11],  // m/s
-    geo_altitude:   s[13],
-    squawk:         s[14],
-    spi:            s[15],
-    position_source: s[16],
+    icao24: normalizeText(s[0]),
+    callsign: normalizeText(s[1]),
+    origin_country: normalizeText(s[2]),
+    time_position: normalizeNumber(s[3]),
+    last_contact: normalizeNumber(s[4]),
+    longitude: normalizeNumber(s[5]),
+    latitude: normalizeNumber(s[6]),
+    baro_altitude: normalizeNumber(s[7]),
+    on_ground: Boolean(s[8]),
+    velocity: normalizeNumber(s[9]),        // m/s
+    heading: normalizeNumber(s[10]),        // degrees from north
+    vertical_rate: normalizeNumber(s[11]),  // m/s
+    geo_altitude: normalizeNumber(s[13]),
+    squawk: normalizeText(s[14]),
+    spi: Boolean(s[15]),
+    position_source: normalizeNumber(s[16]),
+    category: normalizeNumber(s[17]),
   }))
 }
 
@@ -90,12 +102,12 @@ export async function fetchFlights(bounds = FALLBACK_BBOX) {
   if (!res.ok) {
     if (res.status === 429) {
       const retryAfter = parseInt(res.headers.get('X-Rate-Limit-Retry-After-Seconds') || '0', 10) || null
-      record429(retryAfter)
+      record429(retryAfter, FEED_RATE_LIMIT_BUCKET)
     }
     throw new Error(`OpenSky ${res.status}`)
   }
   const data = await res.json()
-  recordSuccess()
+  recordSuccess(FEED_RATE_LIMIT_BUCKET)
   return parseStates(data.states || [])
 }
 
@@ -167,7 +179,7 @@ export async function fetchTrack(icao24, signal) {
   )
   if (res.status === 429) {
     const retryAfter = parseInt(res.headers.get('X-Rate-Limit-Retry-After-Seconds') || '0', 10) || null
-    record429(retryAfter)
+    record429(retryAfter, DETAIL_RATE_LIMIT_BUCKET)
     return null
   }
   if (!res.ok) return null
@@ -181,7 +193,7 @@ export async function fetchAircraftMeta(icao24, signal) {
   )
   if (res.status === 429) {
     const retryAfter = parseInt(res.headers.get('X-Rate-Limit-Retry-After-Seconds') || '0', 10) || null
-    record429(retryAfter)
+    record429(retryAfter, DETAIL_RATE_LIMIT_BUCKET)
     return null
   }
   if (!res.ok) return null

@@ -67,11 +67,39 @@ export default function useDeviceLocation({
   fallbackRadiusMi = DEFAULT_ACCURACY_BASE_RADIUS_MI,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
-  const fallback = useMemo(() => normalizeCenter(fallbackCenter), [
-    fallbackCenter?.lat,
-    fallbackCenter?.lon,
-    fallbackCenter?.accuracy,
-  ])
+  const fallback = useMemo(() => normalizeCenter(fallbackCenter), [fallbackCenter])
+
+  const disabledState = useMemo(() => {
+    if (fallback) {
+      return {
+        ...makeState({
+          center: { lat: fallback.lat, lon: fallback.lon },
+          source: FALLBACK_SOURCE,
+          error: null,
+          accuracy: fallback.accuracy,
+          lastUpdatedMs: fallback.timestamp,
+        }),
+        radiusMi: clampRadiusMi(fallbackRadiusMi, fallbackRadiusMi),
+        isLoading: false,
+        isReady: true,
+        isDeviceLocation: false,
+      }
+    }
+
+    return {
+      ...makeState({
+        center: null,
+        source: UNAVAILABLE_SOURCE,
+        error: 'Location lookup disabled by host config',
+        accuracy: null,
+        lastUpdatedMs: null,
+      }),
+      radiusMi: clampRadiusMi(fallbackRadiusMi, fallbackRadiusMi),
+      isLoading: false,
+      isReady: false,
+      isDeviceLocation: false,
+    }
+  }, [fallback, fallbackRadiusMi])
 
   const fallbackState = fallback
     ? makeState({
@@ -110,40 +138,44 @@ export default function useDeviceLocation({
     return base
   })
 
+  const runtimeUnavailableState = useMemo(() => {
+    if (fallback) {
+      return {
+        ...makeState({
+          center: { lat: fallback.lat, lon: fallback.lon },
+          source: FALLBACK_SOURCE,
+          error: null,
+          accuracy: fallback.accuracy,
+          lastUpdatedMs: fallback.timestamp,
+        }),
+        radiusMi: clampRadiusMi(fallbackRadiusMi, fallbackRadiusMi),
+        isLoading: false,
+        isReady: true,
+        isDeviceLocation: false,
+      }
+    }
+
+    return {
+      ...makeState({
+        center: null,
+        source: UNAVAILABLE_SOURCE,
+        error: 'Geolocation is unavailable in this browser',
+        accuracy: null,
+        lastUpdatedMs: null,
+      }),
+      radiusMi: clampRadiusMi(fallbackRadiusMi, fallbackRadiusMi),
+      isLoading: false,
+      isReady: false,
+      isDeviceLocation: false,
+    }
+  }, [fallback, fallbackRadiusMi])
+
   useEffect(() => {
     if (!enabled) {
-      setState((prev) => ({
-        ...prev,
-        source: UNAVAILABLE_SOURCE,
-        error: 'Location lookup disabled by host config',
-        isReady: false,
-        isDeviceLocation: false,
-        isLoading: false,
-      }))
       return
     }
 
     if (!window || !window.navigator || !window.navigator.geolocation) {
-      if (fallbackState) {
-        setState({
-          ...fallbackState,
-          radiusMi: clampRadiusMi(fallbackRadiusMi, fallbackRadiusMi),
-          isLoading: false,
-          isDeviceLocation: false,
-          isReady: true,
-        })
-        return
-      }
-
-      setState(prev => ({
-        ...prev,
-        center: null,
-        source: UNAVAILABLE_SOURCE,
-        error: 'Geolocation is unavailable in this browser',
-        isReady: false,
-        isDeviceLocation: false,
-        isLoading: false,
-      }))
       return
     }
 
@@ -227,7 +259,9 @@ export default function useDeviceLocation({
       mounted = false
       if (watchId != null) navigator.geolocation.clearWatch(watchId)
     }
-  }, [enabled, fallbackState, fallbackRadiusMi, timeoutMs, fallback?.lat, fallback?.lon])
+  }, [enabled, fallbackState, fallbackRadiusMi, timeoutMs, fallback?.lat, fallback?.lon, fallback?.accuracy])
 
+  if (!enabled) return disabledState
+  if (!window || !window.navigator || !window.navigator.geolocation) return runtimeUnavailableState
   return state
 }

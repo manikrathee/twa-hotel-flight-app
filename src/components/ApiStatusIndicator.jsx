@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
 
-export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, isStale }) {
+export default function ApiStatusIndicator({
+  status,
+  backoffUntil,
+  lastUpdated,
+  isStale,
+  blockedLabel = 'API HOLD',
+  slowLabel = 'API SLOW',
+}) {
   const [remaining, setRemaining] = useState(0)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -40,7 +47,7 @@ export default function ApiStatusIndicator({ status, backoffUntil, lastUpdated, 
   }
 
   const color = status === 'blocked' ? 'var(--red)' : 'var(--amber)'
-  const label = status === 'blocked' ? `API HOLD ${remaining}s` : 'API SLOW'
+  const label = status === 'blocked' ? `${blockedLabel} ${remaining}s` : slowLabel
 
   return (
     <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 16 }}>

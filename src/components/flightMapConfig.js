@@ -28,44 +28,64 @@ export const MAP_STYLE = {
   glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
 }
 
+const RUNWAY_DEFS = [
+  {
+    id: '04L/22R',
+    width: 150,
+    surface: 'CONC',
+    lengthFt: 12079,
+    endpoints: [[-73.7895, 40.6173], [-73.7648, 40.6652]],
+  },
+  {
+    id: '04R/22L',
+    width: 150,
+    surface: 'ASPH',
+    lengthFt: 8400,
+    endpoints: [[-73.7841, 40.6169], [-73.7594, 40.6648]],
+  },
+  {
+    id: '13L/31R',
+    width: 200,
+    surface: 'CONC',
+    lengthFt: 10000,
+    endpoints: [[-73.7973, 40.6556], [-73.7469, 40.626]],
+  },
+  {
+    id: '13R/31L',
+    width: 200,
+    surface: 'CONC',
+    lengthFt: 14511,
+    endpoints: [[-73.8016, 40.6511], [-73.7592, 40.6225]],
+  },
+]
+
 // JFK runway centerlines (FAA-approximate coordinates)
 export const JFK_RUNWAYS = {
   type: 'FeatureCollection',
-  features: [
-    {
+  features: RUNWAY_DEFS.map((runway) => {
+    const [start, end] = runway.endpoints
+    return {
       type: 'Feature',
-      properties: { id: '04L/22R', width: 150, surface: 'CONC', lengthFt: 12079 },
-      geometry: { type: 'LineString', coordinates: [[-73.7895, 40.6173], [-73.7648, 40.6652]] },
-    },
-    {
-      type: 'Feature',
-      properties: { id: '04R/22L', width: 150, surface: 'ASPH', lengthFt: 8400 },
-      geometry: { type: 'LineString', coordinates: [[-73.7841, 40.6169], [-73.7594, 40.6648]] },
-    },
-    {
-      type: 'Feature',
-      properties: { id: '13L/31R', width: 200, surface: 'CONC', lengthFt: 10000 },
-      geometry: { type: 'LineString', coordinates: [[-73.7973, 40.6556], [-73.7469, 40.626]] },
-    },
-    {
-      type: 'Feature',
-      properties: { id: '13R/31L', width: 200, surface: 'CONC', lengthFt: 14511 },
-      geometry: { type: 'LineString', coordinates: [[-73.8016, 40.6511], [-73.7592, 40.6225]] },
-    },
-  ],
+      properties: {
+        id: runway.id,
+        width: runway.width,
+        surface: runway.surface,
+        lengthFt: runway.lengthFt,
+      },
+      geometry: { type: 'LineString', coordinates: [start, end] },
+    }
+  }),
 }
 
 // Runway labels (threshold positions for text placement)
 export const RUNWAY_LABELS = {
   type: 'FeatureCollection',
-  features: [
-    { type: 'Feature', properties: { label: '13R' }, geometry: { type: 'Point', coordinates: [-73.7592, 40.6225] } },
-    { type: 'Feature', properties: { label: '31L' }, geometry: { type: 'Point', coordinates: [-73.8016, 40.6511] } },
-    { type: 'Feature', properties: { label: '13L' }, geometry: { type: 'Point', coordinates: [-73.7469, 40.626] } },
-    { type: 'Feature', properties: { label: '31R' }, geometry: { type: 'Point', coordinates: [-73.7973, 40.6556] } },
-    { type: 'Feature', properties: { label: '04L' }, geometry: { type: 'Point', coordinates: [-73.7895, 40.6173] } },
-    { type: 'Feature', properties: { label: '22R' }, geometry: { type: 'Point', coordinates: [-73.7648, 40.6652] } },
-    { type: 'Feature', properties: { label: '04R' }, geometry: { type: 'Point', coordinates: [-73.7841, 40.6169] } },
-    { type: 'Feature', properties: { label: '22L' }, geometry: { type: 'Point', coordinates: [-73.7594, 40.6648] } },
-  ],
+  features: JFK_RUNWAYS.features.flatMap((feature) => {
+    const [start, end] = feature.geometry.coordinates
+    const [startLabel, endLabel] = String(feature.properties.id || '').split('/')
+    return [
+      { type: 'Feature', properties: { label: startLabel }, geometry: { type: 'Point', coordinates: start } },
+      { type: 'Feature', properties: { label: endLabel }, geometry: { type: 'Point', coordinates: end } },
+    ]
+  }),
 }

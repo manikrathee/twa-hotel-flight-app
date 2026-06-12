@@ -3,10 +3,24 @@ import react from '@vitejs/plugin-react'
 
 const TOKEN_ENDPOINT = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
 
-function openskyAuthProxy(mode) {
-  const env = loadEnv(mode, process.cwd(), '')
+function resolveOpenSkyAuthConfig(env) {
   const clientId = env.OPENSKY_CLIENT_ID || env.VITE_OPENSKY_CLIENT_ID || process.env.OPENSKY_CLIENT_ID || process.env.VITE_OPENSKY_CLIENT_ID
   const clientSecret = env.OPENSKY_CLIENT_SECRET || env.VITE_OPENSKY_CLIENT_SECRET || process.env.OPENSKY_CLIENT_SECRET || process.env.VITE_OPENSKY_CLIENT_SECRET
+  const missing = []
+  if (!clientId) missing.push('OPENSKY_CLIENT_ID')
+  if (!clientSecret) missing.push('OPENSKY_CLIENT_SECRET')
+
+  return {
+    clientId,
+    clientSecret,
+    configured: Boolean(clientId && clientSecret),
+    missing,
+  }
+}
+
+function openskyAuthProxy(mode) {
+  const env = loadEnv(mode, process.cwd(), '')
+  const { clientId, clientSecret, configured, missing } = resolveOpenSkyAuthConfig(env)
 
   return {
     name: 'opensky-auth-proxy',
@@ -19,10 +33,14 @@ function openskyAuthProxy(mode) {
           return
         }
 
-        if (!clientId || !clientSecret) {
+        if (!configured) {
           res.statusCode = 503
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ error: 'OpenSky credentials not configured on server' }))
+          res.end(JSON.stringify({
+            error: 'OpenSky credentials not configured on server',
+            code: 'AUTH_CONFIG_MISSING',
+            missing,
+          }))
           return
         }
 
@@ -53,6 +71,7 @@ function openskyAuthProxy(mode) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const authConfig = resolveOpenSkyAuthConfig(env)
   const fallbackFeedProxyTarget = env.VITE_FALLBACK_FEED_PROXY_TARGET
   const fallbackFeedProxyPath = env.VITE_FALLBACK_FEED_PROXY_PATH || '/api/jfk-fallback'
   const fallbackFeedProxy = fallbackFeedProxyTarget
@@ -69,6 +88,9 @@ export default defineConfig(({ mode }) => {
       : {}
 
     return {
+      define: {
+        'import.meta.env.VITE_OPENSKY_AUTH_ENABLED': JSON.stringify(authConfig.configured ? 'true' : 'false'),
+      },
       plugins: [react(), openskyAuthProxy(mode)],
       build: {
         // MapLibre ships as a single large prebuilt module; keep warning signal for others.
